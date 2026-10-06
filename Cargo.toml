@@ -1,0 +1,10 @@
+[package]
+name = "jolt_sys"
+version = "0.1.0"
+edition = "2021"
+description = "Raw FFI bindings to Jolt Physics (builds the Jolt static library from the local checkout)"
+license = "MIT"
+
+[build-dependencies]
+cmake = "0.1"
+cc = "1"
