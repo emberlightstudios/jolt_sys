@@ -1308,9 +1308,10 @@ unsafe extern "C" {
         rot_y: c_float,
         rot_z: c_float,
         rot_w: c_float,
-        object_layer: u16,
-        density_kg_per_m3: c_float,
-    ) -> c_int;
+ object_layer: u16,
+ density_kg_per_m3: c_float,
+ motion_type: u8,
+ ) -> c_int;
  /// Hinge limit between a part and its parent, about `anchor` (world
  /// space), within [`limits_min`, `limits_max`], seated pose reads zero.
  pub fn bjolt_ragdoll_build_set_hinge(
@@ -1367,10 +1368,17 @@ unsafe extern "C" {
         handle: *mut BJoltRagdoll,
         out_ids: *mut u32,
         id_capacity: u32,
-    ) -> u32;
-    /// Removes bodies + constraints and frees the ragdoll. Never mix with
-    /// per-body remove/destroy on these ids.
-    pub fn bjolt_ragdoll_destroy(world_ptr: *mut BJoltWorld, handle: *mut BJoltRagdoll);
+ ) -> u32;
+ /// Flips every body in the ragdoll to one motion: 0 static,
+ /// 1 kinematic (follow bones, hitbox mode), 2 dynamic (simulate).
+ pub fn bjolt_ragdoll_set_motion(
+ world_ptr: *mut BJoltWorld,
+ handle: *mut BJoltRagdoll,
+ motion_type: u8,
+ );
+ /// Removes bodies + constraints and frees the ragdoll. Never mix with
+ /// per-body remove/destroy on these ids.
+ pub fn bjolt_ragdoll_destroy(world_ptr: *mut BJoltWorld, handle: *mut BJoltRagdoll);
     /// Frees the builder (settings only, after create).
     pub fn bjolt_ragdoll_build_destroy(build: *mut BJoltRagdollBuild);
 }

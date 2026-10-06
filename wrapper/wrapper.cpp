@@ -3002,54 +3002,56 @@ BJoltRagdollBuild *bjolt_ragdoll_build_create()
 // (dims.x = radius). Position + quaternion pose the body origin.
 // Returns the part index, or -1 when the shape is invalid.
 int bjolt_ragdoll_build_add_part(BJoltRagdollBuild *build, int parent_index,
-	uint8_t shape_kind, float dim_x, float dim_y, float dim_z,
-	float pos_x, float pos_y, float pos_z,
-	float rot_x, float rot_y, float rot_z, float rot_w,
-	uint16_t object_layer, float density_kg_per_m3)
+ uint8_t shape_kind, float dim_x, float dim_y, float dim_z,
+ float pos_x, float pos_y, float pos_z,
+ float rot_x, float rot_y, float rot_z, float rot_w,
+ uint16_t object_layer, float density_kg_per_m3, uint8_t motion_type)
 {
-	if (build == nullptr)
-		return -1;
-	Shape::ShapeResult shape_result;
-	switch (shape_kind)
-	{
-	case 1:
-	{
-		BoxShapeSettings box_settings(Vec3(dim_x, dim_y, dim_z));
-		box_settings.mDensity = density_kg_per_m3;
-		box_settings.SetEmbedded();
-		shape_result = box_settings.Create();
-		break;
-	}
-	case 2:
-	{
-		SphereShapeSettings sphere_settings(dim_x);
-		sphere_settings.mDensity = density_kg_per_m3;
-		sphere_settings.SetEmbedded();
-		shape_result = sphere_settings.Create();
-		break;
-	}
-	default:
-	{
-		CapsuleShapeSettings capsule_settings(dim_x, dim_y);
-		capsule_settings.mDensity = density_kg_per_m3;
-		capsule_settings.SetEmbedded();
-		shape_result = capsule_settings.Create();
-		break;
-	}
-	}
-	if (shape_result.HasError())
-		return -1;
-	char joint_name[32];
-	snprintf(joint_name, sizeof(joint_name), "part_%d", build->skeleton->GetJointCount());
-	build->skeleton->AddJoint(joint_name, parent_index);
-	RagdollSettings::Part part;
-	part.SetShape(shape_result.Get());
-	part.mPosition = RVec3(pos_x, pos_y, pos_z);
-	part.mRotation = Quat(rot_x, rot_y, rot_z, rot_w);
-	part.mMotionType = EMotionType::Dynamic;
-	part.mObjectLayer = object_layer;
-	build->settings->mParts.push_back(part);
-	return build->skeleton->GetJointCount() - 1;
+ if (build == nullptr)
+ return -1;
+ Shape::ShapeResult shape_result;
+ switch (shape_kind)
+ {
+ case 1:
+ {
+ BoxShapeSettings box_settings(Vec3(dim_x, dim_y, dim_z));
+ box_settings.mDensity = density_kg_per_m3;
+ box_settings.SetEmbedded();
+ shape_result = box_settings.Create();
+ break;
+ }
+ case 2:
+ {
+ SphereShapeSettings sphere_settings(dim_x);
+ sphere_settings.mDensity = density_kg_per_m3;
+ sphere_settings.SetEmbedded();
+ shape_result = sphere_settings.Create();
+ break;
+ }
+ default:
+ {
+ CapsuleShapeSettings capsule_settings(dim_x, dim_y);
+ capsule_settings.mDensity = density_kg_per_m3;
+ capsule_settings.SetEmbedded();
+ shape_result = capsule_settings.Create();
+ break;
+ }
+ }
+ if (shape_result.HasError())
+ return -1;
+ char joint_name[32];
+ snprintf(joint_name, sizeof(joint_name), "part_%d", build->skeleton->GetJointCount());
+ build->skeleton->AddJoint(joint_name, parent_index);
+ RagdollSettings::Part part;
+ part.SetShape(shape_result.Get());
+ part.mPosition = RVec3(pos_x, pos_y, pos_z);
+ part.mRotation = Quat(rot_x, rot_y, rot_z, rot_w);
+ // 0 = static, 1 = kinematic (hitboxes), anything else = dynamic.
+ part.mMotionType = motion_type == 0 ? EMotionType::Static :
+ (motion_type == 1 ? EMotionType::Kinematic : EMotionType::Dynamic);
+ part.mObjectLayer = object_layer;
+ build->settings->mParts.push_back(part);
+ return build->skeleton->GetJointCount() - 1;
 }
 
 // Hinge limit between a part and its parent: rotation about the hinge axis
@@ -3167,6 +3169,22 @@ uint32_t bjolt_ragdoll_body_ids(BJoltRagdoll *handle, uint32_t *out_ids, uint32_
 	for (uint32_t body_index = 0; body_index < kept; ++body_index)
 		out_ids[body_index] = handle->ragdoll->GetBodyID(body_index).GetIndexAndSequenceNumber();
 	return kept;
+}
+
+// Flips every body in the ragdoll to one motion: 0 static, 1 kinematic,
+// 2 dynamic. Same wake rules as bjolt_set_motion_type. Kinematic bodies
+// follow bones (hitbox mode); dynamic bodies simulate (ragdoll mode).
+void bjolt_ragdoll_set_motion(BJoltWorld *world, BJoltRagdoll *handle, uint8_t motion_type)
+{
+ if (world == nullptr || handle == nullptr)
+ return;
+ BodyInterface &body_interface = world->physics_system->GetBodyInterface();
+ EMotionType jolt_motion = motion_type == 0 ? EMotionType::Static :
+ (motion_type == 1 ? EMotionType::Kinematic : EMotionType::Dynamic);
+ EActivation wake = jolt_motion == EMotionType::Static ?
+ EActivation::DontActivate : EActivation::Activate;
+ for (const BodyID &body_id : handle->ragdoll->GetBodyIDs())
+ body_interface.SetMotionType(body_id, jolt_motion, wake);
 }
 
 // Removes bodies + constraints from the system and frees the ragdoll.
