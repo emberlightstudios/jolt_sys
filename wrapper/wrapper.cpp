@@ -42,8 +42,8 @@
 #include <Jolt/Physics/Constraints/RackAndPinionConstraint.h>
 #include <Jolt/Physics/Constraints/PathConstraint.h>
 #include <Jolt/Physics/Constraints/PathConstraintPathHermite.h>
-#include <Jolt/Physics/Body/BodyCreationSettings.h>
-#include <Jolt/Physics/Body/BodyLock.h>
+#include <Jolt/Physics/Ragdoll/Ragdoll.h>
+#include <Jolt/Skeleton/Skeleton.h>
 #include <Jolt/Physics/SoftBody/SoftBodyCreationSettings.h>
 #include <Jolt/Physics/SoftBody/SoftBodyMotionProperties.h>
 #include <Jolt/Physics/Collision/Shape/OffsetCenterOfMassShape.h>
@@ -2976,6 +2976,209 @@ void bjolt_body_set_density(BJoltWorld *world, uint32_t body_raw, float density_
 				body.GetMotionProperties()->GetAllowedDOFs(), mass_properties);
 		}
 	}
+}
+
+// Ragdoll creation through Jolt's RagdollSettings: skeleton + per-part
+// bodies with mass/inertia stabilization, constraint priorities, and
+// parent-child no-collide handled inside Jolt instead of by hand.
+// Parts are added parents-first (index < child); the joint index, part
+// index, and collision subgroup are all the same number.
+struct BJoltRagdollBuild {
+	Ref<RagdollSettings> settings;
+	Ref<Skeleton> skeleton;
+};
+
+BJoltRagdollBuild *bjolt_ragdoll_build_create()
+{
+	BJoltRagdollBuild *build = new BJoltRagdollBuild();
+	build->skeleton = new Skeleton();
+	build->settings = new RagdollSettings();
+	build->settings->mSkeleton = build->skeleton;
+	return build;
+}
+
+// Adds one ragdoll part. `shape_kind`: 0 = capsule (dims = cylinder
+// half height, radius), 1 = box (dims = half extents), 2 = sphere
+// (dims.x = radius). Position + quaternion pose the body origin.
+// Returns the part index, or -1 when the shape is invalid.
+int bjolt_ragdoll_build_add_part(BJoltRagdollBuild *build, int parent_index,
+	uint8_t shape_kind, float dim_x, float dim_y, float dim_z,
+	float pos_x, float pos_y, float pos_z,
+	float rot_x, float rot_y, float rot_z, float rot_w,
+	uint16_t object_layer, float density_kg_per_m3)
+{
+	if (build == nullptr)
+		return -1;
+	Shape::ShapeResult shape_result;
+	switch (shape_kind)
+	{
+	case 1:
+	{
+		BoxShapeSettings box_settings(Vec3(dim_x, dim_y, dim_z));
+		box_settings.mDensity = density_kg_per_m3;
+		box_settings.SetEmbedded();
+		shape_result = box_settings.Create();
+		break;
+	}
+	case 2:
+	{
+		SphereShapeSettings sphere_settings(dim_x);
+		sphere_settings.mDensity = density_kg_per_m3;
+		sphere_settings.SetEmbedded();
+		shape_result = sphere_settings.Create();
+		break;
+	}
+	default:
+	{
+		CapsuleShapeSettings capsule_settings(dim_x, dim_y);
+		capsule_settings.mDensity = density_kg_per_m3;
+		capsule_settings.SetEmbedded();
+		shape_result = capsule_settings.Create();
+		break;
+	}
+	}
+	if (shape_result.HasError())
+		return -1;
+	char joint_name[32];
+	snprintf(joint_name, sizeof(joint_name), "part_%d", build->skeleton->GetJointCount());
+	build->skeleton->AddJoint(joint_name, parent_index);
+	RagdollSettings::Part part;
+	part.SetShape(shape_result.Get());
+	part.mPosition = RVec3(pos_x, pos_y, pos_z);
+	part.mRotation = Quat(rot_x, rot_y, rot_z, rot_w);
+	part.mMotionType = EMotionType::Dynamic;
+	part.mObjectLayer = object_layer;
+	build->settings->mParts.push_back(part);
+	return build->skeleton->GetJointCount() - 1;
+}
+
+// Hinge limit between a part and its parent: rotation about the hinge axis
+// within [limits_min, limits_max], measured from the seated pose (identical
+// frames on both sides read zero). World space, matching the existing
+// bjolt_create_hinge_constraint conventions.
+bool bjolt_ragdoll_build_set_hinge(BJoltRagdollBuild *build, int part_index,
+	float hinge_axis_x, float hinge_axis_y, float hinge_axis_z,
+	float normal_axis_x, float normal_axis_y, float normal_axis_z,
+	float limits_min, float limits_max)
+{
+	if (build == nullptr || part_index < 0 || part_index >= (int)build->settings->mParts.size())
+		return false;
+	Ref<HingeConstraintSettings> hinge = new HingeConstraintSettings();
+	hinge->mSpace = EConstraintSpace::WorldSpace;
+	hinge->mHingeAxis1 = Vec3(hinge_axis_x, hinge_axis_y, hinge_axis_z);
+	hinge->mNormalAxis1 = Vec3(normal_axis_x, normal_axis_y, normal_axis_z);
+	hinge->mHingeAxis2 = hinge->mHingeAxis1;
+	hinge->mNormalAxis2 = hinge->mNormalAxis1;
+	hinge->mLimitsMin = limits_min;
+	hinge->mLimitsMax = limits_max;
+	// Point1/Point2 default to zero; CreateRagdoll seats them from the part
+	// poses (sitting pose = zero angle), so no anchor needed here.
+	build->settings->mParts[part_index].mToParent = hinge;
+	return true;
+}
+
+// Swing-twist limit between a part and its parent: cone swing about the
+// twist axis plus bounded twist. Same conventions as
+// bjolt_create_swing_twist_constraint (anchors seat from part poses).
+bool bjolt_ragdoll_build_set_swing_twist(BJoltRagdollBuild *build, int part_index,
+	float twist_axis_x, float twist_axis_y, float twist_axis_z,
+	float plane_axis_x, float plane_axis_y, float plane_axis_z,
+	float normal_half_cone_angle, float plane_half_cone_angle,
+	float twist_min_angle, float twist_max_angle)
+{
+	if (build == nullptr || part_index < 0 || part_index >= (int)build->settings->mParts.size())
+		return false;
+	Ref<SwingTwistConstraintSettings> swing_twist = new SwingTwistConstraintSettings();
+	swing_twist->mSpace = EConstraintSpace::WorldSpace;
+	swing_twist->mTwistAxis1 = Vec3(twist_axis_x, twist_axis_y, twist_axis_z);
+	swing_twist->mPlaneAxis1 = Vec3(plane_axis_x, plane_axis_y, plane_axis_z);
+	swing_twist->mTwistAxis2 = swing_twist->mTwistAxis1;
+	swing_twist->mPlaneAxis2 = swing_twist->mPlaneAxis1;
+	swing_twist->mNormalHalfConeAngle = normal_half_cone_angle;
+	swing_twist->mPlaneHalfConeAngle = plane_half_cone_angle;
+	swing_twist->mTwistMinAngle = twist_min_angle;
+	swing_twist->mTwistMaxAngle = twist_max_angle;
+	build->settings->mParts[part_index].mToParent = swing_twist;
+	return true;
+}
+
+// Mass-ratio clamp + parent-inertia boost, in place. Must run after all
+// parts are added, before create. False only on inertia-decomposition
+// failure.
+bool bjolt_ragdoll_build_stabilize(BJoltRagdollBuild *build)
+{
+	if (build == nullptr)
+		return false;
+	return build->settings->Stabilize();
+}
+
+// Root-biased constraint priorities (leaves solve first) + one shared
+// parent-child no-collide filter. Both require correctly ordered joints,
+// which parents-first insertion guarantees.
+void bjolt_ragdoll_build_finalize(BJoltRagdollBuild *build)
+{
+	if (build == nullptr)
+		return;
+	build->settings->CalculateConstraintPriorities();
+	build->settings->DisableParentChildCollisions();
+}
+
+// Creates bodies + constraints from stabilized settings and adds them to
+// the system in one shot. `group_id` must be unique per ragdoll in the
+// system. Returns null on failure.
+struct BJoltRagdoll {
+	Ref<Ragdoll> ragdoll;
+};
+
+BJoltRagdoll *bjolt_ragdoll_create(BJoltWorld *world, BJoltRagdollBuild *build,
+	uint32_t group_id, uint64_t user_data)
+{
+	if (world == nullptr || build == nullptr)
+		return nullptr;
+	Ragdoll *ragdoll = build->settings->CreateRagdoll(group_id, user_data,
+		world->physics_system);
+	if (ragdoll == nullptr)
+		return nullptr;
+	ragdoll->AddToPhysicsSystem(EActivation::Activate);
+	BJoltRagdoll *handle = new BJoltRagdoll();
+	handle->ragdoll = ragdoll;
+	return handle;
+}
+
+uint32_t bjolt_ragdoll_body_count(BJoltRagdoll *handle)
+{
+	if (handle == nullptr)
+		return 0;
+	return (uint32_t)handle->ragdoll->GetBodyCount();
+}
+
+// Writes body ids (Jolt index+sequence scheme, same as every other create)
+// in part order into `out_ids`. Returns ids written.
+uint32_t bjolt_ragdoll_body_ids(BJoltRagdoll *handle, uint32_t *out_ids, uint32_t id_capacity)
+{
+	if (handle == nullptr || out_ids == nullptr || id_capacity == 0)
+		return 0;
+	uint32_t body_count = (uint32_t)handle->ragdoll->GetBodyCount();
+	uint32_t kept = body_count < id_capacity ? body_count : id_capacity;
+	for (uint32_t body_index = 0; body_index < kept; ++body_index)
+		out_ids[body_index] = handle->ragdoll->GetBodyID(body_index).GetIndexAndSequenceNumber();
+	return kept;
+}
+
+// Removes bodies + constraints from the system and frees the ragdoll.
+// Never mix with per-body bjolt_body_remove_destroy on these ids.
+void bjolt_ragdoll_destroy(BJoltWorld *world, BJoltRagdoll *handle)
+{
+	if (handle == nullptr)
+		return;
+	if (world != nullptr)
+		handle->ragdoll->RemoveFromPhysicsSystem();
+	delete handle;
+}
+
+void bjolt_ragdoll_build_destroy(BJoltRagdollBuild *build)
+{
+	delete build;
 }
 
 } // extern "C"

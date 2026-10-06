@@ -14,6 +14,20 @@ pub struct BJoltWorld {
     _opaque: [u8; 0],
 }
 
+/// Opaque handle to the C++ `BJoltRagdollBuild` (`RagdollSettings` +
+/// `Skeleton` under construction).
+#[repr(C)]
+pub struct BJoltRagdollBuild {
+    _opaque: [u8; 0],
+}
+
+/// Opaque handle to a live C++ `BJoltRagdoll` (created bodies +
+/// constraints in the system).
+#[repr(C)]
+pub struct BJoltRagdoll {
+    _opaque: [u8; 0],
+}
+
 /// Largest object-layer count the shim supports (one broadphase bucket each).
 pub const MAX_OBJECT_LAYERS: usize = 16;
 
@@ -193,7 +207,10 @@ pub struct CompoundPartFfi {
 
 unsafe extern "C" {
     pub fn bjolt_init() -> bool;
-    pub fn bjolt_world_create_with_layers(layer_count: u32, collide_matrix: *const u8) -> *mut BJoltWorld;
+    pub fn bjolt_world_create_with_layers(
+        layer_count: u32,
+        collide_matrix: *const u8,
+    ) -> *mut BJoltWorld;
     pub fn bjolt_world_destroy(world_ptr: *mut BJoltWorld);
     pub fn bjolt_create_floor(
         world_ptr: *mut BJoltWorld,
@@ -786,15 +803,26 @@ unsafe extern "C" {
         rot_z: c_float,
         rot_w: c_float,
     );
-    pub fn bjolt_set_position(world_ptr: *mut BJoltWorld, body_raw: u32, pos_x: c_float, pos_y: c_float, pos_z: c_float);
+    pub fn bjolt_set_position(
+        world_ptr: *mut BJoltWorld,
+        body_raw: u32,
+        pos_x: c_float,
+        pos_y: c_float,
+        pos_z: c_float,
+    );
     pub fn bjolt_set_friction(world_ptr: *mut BJoltWorld, body_raw: u32, friction: c_float);
     pub fn bjolt_set_restitution(world_ptr: *mut BJoltWorld, body_raw: u32, restitution: c_float);
     pub fn bjolt_set_ccd(world_ptr: *mut BJoltWorld, body_raw: u32, use_ccd: bool);
     pub fn bjolt_sleep_body(world_ptr: *mut BJoltWorld, body_raw: u32);
     pub fn bjolt_wake_body(world_ptr: *mut BJoltWorld, body_raw: u32);
     pub fn bjolt_set_motion_type(world_ptr: *mut BJoltWorld, body_raw: u32, motion_type: u8);
-    pub fn bjolt_drain_slept(world_ptr: *mut BJoltWorld, out_ids: *mut u32, id_capacity: u32) -> u32;
-    pub fn bjolt_drain_woke(world_ptr: *mut BJoltWorld, out_ids: *mut u32, id_capacity: u32) -> u32;
+    pub fn bjolt_drain_slept(
+        world_ptr: *mut BJoltWorld,
+        out_ids: *mut u32,
+        id_capacity: u32,
+    ) -> u32;
+    pub fn bjolt_drain_woke(world_ptr: *mut BJoltWorld, out_ids: *mut u32, id_capacity: u32)
+        -> u32;
     pub fn bjolt_create_heightfield(
         world_ptr: *mut BJoltWorld,
         sample_heights: *const c_float,
@@ -939,12 +967,26 @@ unsafe extern "C" {
     pub fn bjolt_soft_pressure(world_ptr: *mut BJoltWorld, body_raw: u32) -> c_float;
     pub fn bjolt_soft_set_pressure(world_ptr: *mut BJoltWorld, body_raw: u32, pressure: c_float);
     pub fn bjolt_soft_iterations(world_ptr: *mut BJoltWorld, body_raw: u32) -> u32;
-    pub fn bjolt_soft_set_iterations(world_ptr: *mut BJoltWorld, body_raw: u32, num_iterations: u32);
+    pub fn bjolt_soft_set_iterations(
+        world_ptr: *mut BJoltWorld,
+        body_raw: u32,
+        num_iterations: u32,
+    );
     pub fn bjolt_soft_vertex_radius(world_ptr: *mut BJoltWorld, body_raw: u32) -> c_float;
-    pub fn bjolt_soft_set_vertex_radius(world_ptr: *mut BJoltWorld, body_raw: u32, vertex_radius: c_float);
+    pub fn bjolt_soft_set_vertex_radius(
+        world_ptr: *mut BJoltWorld,
+        body_raw: u32,
+        vertex_radius: c_float,
+    );
     pub fn bjolt_soft_volume(world_ptr: *mut BJoltWorld, body_raw: u32) -> c_float;
     pub fn bjolt_soft_destroy(world_ptr: *mut BJoltWorld, body_raw: u32);
-    pub fn bjolt_soft_push(world_ptr: *mut BJoltWorld, body_raw: u32, force_x: c_float, force_y: c_float, force_z: c_float);
+    pub fn bjolt_soft_push(
+        world_ptr: *mut BJoltWorld,
+        body_raw: u32,
+        force_x: c_float,
+        force_y: c_float,
+        force_z: c_float,
+    );
     pub fn bjolt_set_position_rotation(
         world_ptr: *mut BJoltWorld,
         body_raw: u32,
@@ -962,7 +1004,10 @@ unsafe extern "C" {
         target_velocity: c_float,
     ) -> bool;
     pub fn bjolt_remove_constraint(world_ptr: *mut BJoltWorld, constraint_id: u32);
-    pub fn bjolt_constraint_path_fraction(world_ptr: *mut BJoltWorld, constraint_id: u32) -> c_float;
+    pub fn bjolt_constraint_path_fraction(
+        world_ptr: *mut BJoltWorld,
+        constraint_id: u32,
+    ) -> c_float;
     pub fn bjolt_constraint_path_looping(world_ptr: *mut BJoltWorld, constraint_id: u32) -> c_int;
     /// Creates a virtual character capsule. Bottom of the capsule sits at
     /// the spawn position; returns the character id (0 on failure).
@@ -1208,11 +1253,7 @@ unsafe extern "C" {
     /// Stops two bodies colliding (ragdoll parent-child pairs). Builds one
     /// shared group table per pair: fine for a handful of links, not for
     /// crowds. No-op on bad ids.
-    pub fn bjolt_bodies_no_collide(
-        world_ptr: *mut BJoltWorld,
-        body_a_raw: u32,
-        body_b_raw: u32,
-    );
+    pub fn bjolt_bodies_no_collide(world_ptr: *mut BJoltWorld, body_a_raw: u32, body_b_raw: u32);
     /// Drains contact begin pairs since the last step into flat body-id
     /// arrays. Returns events kept (capped at capacity); resets the queue.
     pub fn bjolt_drain_contact_added(
@@ -1245,4 +1286,85 @@ unsafe extern "C" {
         body_raw: u32,
         density_kg_per_m3: c_float,
     );
+    /// Ragdoll builder: opaque `BJoltRagdollBuild` holding Jolt
+    /// `RagdollSettings` + `Skeleton`. Parts added parents-first; joint,
+    /// part, and collision-subgroup indices coincide.
+    pub fn bjolt_ragdoll_build_create() -> *mut BJoltRagdollBuild;
+    /// Adds one part: `shape_kind` 0 = capsule (`dim_x` cylinder half
+    /// height, `dim_y` radius), 1 = box (`dim`s half extents), 2 = sphere
+    /// (`dim_x` radius). Position + quaternion pose the body origin.
+    /// Returns the part index, or -1 on a bad shape.
+    pub fn bjolt_ragdoll_build_add_part(
+        build: *mut BJoltRagdollBuild,
+        parent_index: c_int,
+        shape_kind: u8,
+        dim_x: c_float,
+        dim_y: c_float,
+        dim_z: c_float,
+        pos_x: c_float,
+        pos_y: c_float,
+        pos_z: c_float,
+        rot_x: c_float,
+        rot_y: c_float,
+        rot_z: c_float,
+        rot_w: c_float,
+        object_layer: u16,
+        density_kg_per_m3: c_float,
+    ) -> c_int;
+    /// Hinge limit between a part and its parent, about `hinge_axis`
+    /// within [`limits_min`, `limits_max`], seated pose reads zero.
+    pub fn bjolt_ragdoll_build_set_hinge(
+        build: *mut BJoltRagdollBuild,
+        part_index: c_int,
+        hinge_axis_x: c_float,
+        hinge_axis_y: c_float,
+        hinge_axis_z: c_float,
+        normal_axis_x: c_float,
+        normal_axis_y: c_float,
+        normal_axis_z: c_float,
+        limits_min: c_float,
+        limits_max: c_float,
+    ) -> bool;
+    /// Swing-twist limit between a part and its parent: cone swing about
+    /// `twist_axis` plus bounded twist. Anchors seat from part poses.
+    pub fn bjolt_ragdoll_build_set_swing_twist(
+        build: *mut BJoltRagdollBuild,
+        part_index: c_int,
+        twist_axis_x: c_float,
+        twist_axis_y: c_float,
+        twist_axis_z: c_float,
+        plane_axis_x: c_float,
+        plane_axis_y: c_float,
+        plane_axis_z: c_float,
+        normal_half_cone_angle: c_float,
+        plane_half_cone_angle: c_float,
+        twist_min_angle: c_float,
+        twist_max_angle: c_float,
+    ) -> bool;
+    /// Jolt mass stabilization (ratio clamp + parent-inertia boost), in
+    /// place. Run after all parts, before create. False on failure.
+    pub fn bjolt_ragdoll_build_stabilize(build: *mut BJoltRagdollBuild) -> bool;
+    /// Constraint priorities + shared parent-child no-collide filter.
+    pub fn bjolt_ragdoll_build_finalize(build: *mut BJoltRagdollBuild);
+    /// Creates bodies + constraints and adds them to the system in one
+    /// shot. `group_id` unique per ragdoll. Null on failure.
+    pub fn bjolt_ragdoll_create(
+        world_ptr: *mut BJoltWorld,
+        build: *mut BJoltRagdollBuild,
+        group_id: u32,
+        user_data: u64,
+    ) -> *mut BJoltRagdoll;
+    /// Part count (= body count) of a live ragdoll.
+    pub fn bjolt_ragdoll_body_count(handle: *mut BJoltRagdoll) -> u32;
+    /// Body ids in part order. Returns ids written (capped at capacity).
+    pub fn bjolt_ragdoll_body_ids(
+        handle: *mut BJoltRagdoll,
+        out_ids: *mut u32,
+        id_capacity: u32,
+    ) -> u32;
+    /// Removes bodies + constraints and frees the ragdoll. Never mix with
+    /// per-body remove/destroy on these ids.
+    pub fn bjolt_ragdoll_destroy(world_ptr: *mut BJoltWorld, handle: *mut BJoltRagdoll);
+    /// Frees the builder (settings only, after create).
+    pub fn bjolt_ragdoll_build_destroy(build: *mut BJoltRagdollBuild);
 }
