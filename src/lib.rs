@@ -1238,4 +1238,11 @@ unsafe extern "C" {
         linear_damping: c_float,
         angular_damping: c_float,
     );
+    /// Live density: rescales mass + inertia to density × shape volume.
+    /// No-op on bad or static ids.
+    pub fn bjolt_body_set_density(
+        world_ptr: *mut BJoltWorld,
+        body_raw: u32,
+        density_kg_per_m3: c_float,
+    );
 }

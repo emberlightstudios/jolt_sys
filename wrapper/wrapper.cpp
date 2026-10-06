@@ -2960,4 +2960,22 @@ void bjolt_body_set_damping(BJoltWorld *world, uint32_t body_raw, float linear_d
 	}
 }
 
+// Live density: rescale the body's mass properties to density × shape
+// volume (inertia scales with the mass). No-op on bad or static ids.
+void bjolt_body_set_density(BJoltWorld *world, uint32_t body_raw, float density_kg_per_m3)
+{
+	BodyLockWrite body_lock(world->physics_system->GetBodyLockInterface(), BodyID(body_raw));
+	if (body_lock.Succeeded())
+	{
+		Body &body = body_lock.GetBody();
+		if (!body.IsStatic())
+		{
+			MassProperties mass_properties = body.GetShape()->GetMassProperties();
+			mass_properties.ScaleToMass(density_kg_per_m3 * body.GetShape()->GetVolume());
+			body.GetMotionProperties()->SetMassProperties(
+				body.GetMotionProperties()->GetAllowedDOFs(), mass_properties);
+		}
+	}
+}
+
 } // extern "C"
