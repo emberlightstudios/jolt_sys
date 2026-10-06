@@ -1311,36 +1311,42 @@ unsafe extern "C" {
         object_layer: u16,
         density_kg_per_m3: c_float,
     ) -> c_int;
-    /// Hinge limit between a part and its parent, about `hinge_axis`
-    /// within [`limits_min`, `limits_max`], seated pose reads zero.
-    pub fn bjolt_ragdoll_build_set_hinge(
-        build: *mut BJoltRagdollBuild,
-        part_index: c_int,
-        hinge_axis_x: c_float,
-        hinge_axis_y: c_float,
-        hinge_axis_z: c_float,
-        normal_axis_x: c_float,
-        normal_axis_y: c_float,
-        normal_axis_z: c_float,
-        limits_min: c_float,
-        limits_max: c_float,
-    ) -> bool;
-    /// Swing-twist limit between a part and its parent: cone swing about
-    /// `twist_axis` plus bounded twist. Anchors seat from part poses.
-    pub fn bjolt_ragdoll_build_set_swing_twist(
-        build: *mut BJoltRagdollBuild,
-        part_index: c_int,
-        twist_axis_x: c_float,
-        twist_axis_y: c_float,
-        twist_axis_z: c_float,
-        plane_axis_x: c_float,
-        plane_axis_y: c_float,
-        plane_axis_z: c_float,
-        normal_half_cone_angle: c_float,
-        plane_half_cone_angle: c_float,
-        twist_min_angle: c_float,
-        twist_max_angle: c_float,
-    ) -> bool;
+ /// Hinge limit between a part and its parent, about `anchor` (world
+ /// space), within [`limits_min`, `limits_max`], seated pose reads zero.
+ pub fn bjolt_ragdoll_build_set_hinge(
+ build: *mut BJoltRagdollBuild,
+ part_index: c_int,
+ anchor_x: c_float,
+ anchor_y: c_float,
+ anchor_z: c_float,
+ hinge_axis_x: c_float,
+ hinge_axis_y: c_float,
+ hinge_axis_z: c_float,
+ normal_axis_x: c_float,
+ normal_axis_y: c_float,
+ normal_axis_z: c_float,
+ limits_min: c_float,
+ limits_max: c_float,
+ ) -> bool;
+ /// Swing-twist limit between a part and its parent, about `anchor`
+ /// (world space): cone swing about `twist_axis` plus bounded twist.
+ pub fn bjolt_ragdoll_build_set_swing_twist(
+ build: *mut BJoltRagdollBuild,
+ part_index: c_int,
+ anchor_x: c_float,
+ anchor_y: c_float,
+ anchor_z: c_float,
+ twist_axis_x: c_float,
+ twist_axis_y: c_float,
+ twist_axis_z: c_float,
+ plane_axis_x: c_float,
+ plane_axis_y: c_float,
+ plane_axis_z: c_float,
+ normal_half_cone_angle: c_float,
+ plane_half_cone_angle: c_float,
+ twist_min_angle: c_float,
+ twist_max_angle: c_float,
+ ) -> bool;
     /// Jolt mass stabilization (ratio clamp + parent-inertia boost), in
     /// place. Run after all parts, before create. False on failure.
     pub fn bjolt_ragdoll_build_stabilize(build: *mut BJoltRagdollBuild) -> bool;

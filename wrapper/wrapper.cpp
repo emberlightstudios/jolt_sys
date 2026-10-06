@@ -3053,53 +3053,57 @@ int bjolt_ragdoll_build_add_part(BJoltRagdollBuild *build, int parent_index,
 }
 
 // Hinge limit between a part and its parent: rotation about the hinge axis
-// within [limits_min, limits_max], measured from the seated pose (identical
-// frames on both sides read zero). World space, matching the existing
-// bjolt_create_hinge_constraint conventions.
+// within [limits_min, limits_max] about `anchor` (world space), measured
+// from the seated pose (identical frames on both sides read zero). Same
+// conventions as bjolt_create_hinge_constraint.
 bool bjolt_ragdoll_build_set_hinge(BJoltRagdollBuild *build, int part_index,
-	float hinge_axis_x, float hinge_axis_y, float hinge_axis_z,
-	float normal_axis_x, float normal_axis_y, float normal_axis_z,
-	float limits_min, float limits_max)
+ float anchor_x, float anchor_y, float anchor_z,
+ float hinge_axis_x, float hinge_axis_y, float hinge_axis_z,
+ float normal_axis_x, float normal_axis_y, float normal_axis_z,
+ float limits_min, float limits_max)
 {
-	if (build == nullptr || part_index < 0 || part_index >= (int)build->settings->mParts.size())
-		return false;
-	Ref<HingeConstraintSettings> hinge = new HingeConstraintSettings();
-	hinge->mSpace = EConstraintSpace::WorldSpace;
-	hinge->mHingeAxis1 = Vec3(hinge_axis_x, hinge_axis_y, hinge_axis_z);
-	hinge->mNormalAxis1 = Vec3(normal_axis_x, normal_axis_y, normal_axis_z);
-	hinge->mHingeAxis2 = hinge->mHingeAxis1;
-	hinge->mNormalAxis2 = hinge->mNormalAxis1;
-	hinge->mLimitsMin = limits_min;
-	hinge->mLimitsMax = limits_max;
-	// Point1/Point2 default to zero; CreateRagdoll seats them from the part
-	// poses (sitting pose = zero angle), so no anchor needed here.
-	build->settings->mParts[part_index].mToParent = hinge;
-	return true;
+ if (build == nullptr || part_index < 0 || part_index >= (int)build->settings->mParts.size())
+ return false;
+ Ref<HingeConstraintSettings> hinge = new HingeConstraintSettings();
+ hinge->mSpace = EConstraintSpace::WorldSpace;
+ hinge->mPoint1 = RVec3(anchor_x, anchor_y, anchor_z);
+ hinge->mPoint2 = RVec3(anchor_x, anchor_y, anchor_z);
+ hinge->mHingeAxis1 = Vec3(hinge_axis_x, hinge_axis_y, hinge_axis_z);
+ hinge->mNormalAxis1 = Vec3(normal_axis_x, normal_axis_y, normal_axis_z);
+ hinge->mHingeAxis2 = hinge->mHingeAxis1;
+ hinge->mNormalAxis2 = hinge->mNormalAxis1;
+ hinge->mLimitsMin = limits_min;
+ hinge->mLimitsMax = limits_max;
+ build->settings->mParts[part_index].mToParent = hinge;
+ return true;
 }
 
 // Swing-twist limit between a part and its parent: cone swing about the
-// twist axis plus bounded twist. Same conventions as
-// bjolt_create_swing_twist_constraint (anchors seat from part poses).
+// twist axis plus bounded twist, about `anchor` (world space). Same
+// conventions as bjolt_create_swing_twist_constraint.
 bool bjolt_ragdoll_build_set_swing_twist(BJoltRagdollBuild *build, int part_index,
-	float twist_axis_x, float twist_axis_y, float twist_axis_z,
-	float plane_axis_x, float plane_axis_y, float plane_axis_z,
-	float normal_half_cone_angle, float plane_half_cone_angle,
-	float twist_min_angle, float twist_max_angle)
+ float anchor_x, float anchor_y, float anchor_z,
+ float twist_axis_x, float twist_axis_y, float twist_axis_z,
+ float plane_axis_x, float plane_axis_y, float plane_axis_z,
+ float normal_half_cone_angle, float plane_half_cone_angle,
+ float twist_min_angle, float twist_max_angle)
 {
-	if (build == nullptr || part_index < 0 || part_index >= (int)build->settings->mParts.size())
-		return false;
-	Ref<SwingTwistConstraintSettings> swing_twist = new SwingTwistConstraintSettings();
-	swing_twist->mSpace = EConstraintSpace::WorldSpace;
-	swing_twist->mTwistAxis1 = Vec3(twist_axis_x, twist_axis_y, twist_axis_z);
-	swing_twist->mPlaneAxis1 = Vec3(plane_axis_x, plane_axis_y, plane_axis_z);
-	swing_twist->mTwistAxis2 = swing_twist->mTwistAxis1;
-	swing_twist->mPlaneAxis2 = swing_twist->mPlaneAxis1;
-	swing_twist->mNormalHalfConeAngle = normal_half_cone_angle;
-	swing_twist->mPlaneHalfConeAngle = plane_half_cone_angle;
-	swing_twist->mTwistMinAngle = twist_min_angle;
-	swing_twist->mTwistMaxAngle = twist_max_angle;
-	build->settings->mParts[part_index].mToParent = swing_twist;
-	return true;
+ if (build == nullptr || part_index < 0 || part_index >= (int)build->settings->mParts.size())
+ return false;
+ Ref<SwingTwistConstraintSettings> swing_twist = new SwingTwistConstraintSettings();
+ swing_twist->mSpace = EConstraintSpace::WorldSpace;
+ swing_twist->mPosition1 = RVec3(anchor_x, anchor_y, anchor_z);
+ swing_twist->mPosition2 = RVec3(anchor_x, anchor_y, anchor_z);
+ swing_twist->mTwistAxis1 = Vec3(twist_axis_x, twist_axis_y, twist_axis_z);
+ swing_twist->mPlaneAxis1 = Vec3(plane_axis_x, plane_axis_y, plane_axis_z);
+ swing_twist->mTwistAxis2 = swing_twist->mTwistAxis1;
+ swing_twist->mPlaneAxis2 = swing_twist->mPlaneAxis1;
+ swing_twist->mNormalHalfConeAngle = normal_half_cone_angle;
+ swing_twist->mPlaneHalfConeAngle = plane_half_cone_angle;
+ swing_twist->mTwistMinAngle = twist_min_angle;
+ swing_twist->mTwistMaxAngle = twist_max_angle;
+ build->settings->mParts[part_index].mToParent = swing_twist;
+ return true;
 }
 
 // Mass-ratio clamp + parent-inertia boost, in place. Must run after all
