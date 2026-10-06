@@ -3055,13 +3055,16 @@ int bjolt_ragdoll_build_add_part(BJoltRagdollBuild *build, int parent_index,
 }
 
 // Hinge limit between a part and its parent: rotation about the hinge axis
-// within [limits_min, limits_max] about `anchor` (world space), measured
-// from the seated pose (identical frames on both sides read zero). Same
-// conventions as bjolt_create_hinge_constraint.
+// within [limits_min, limits_max] about `anchor` (world space). Per-side
+// frames (`1` from the parent's seated rotation, `2` from the child's) so
+// the seated pose reads zero — identical axes would pre-bend every joint
+// whose bodies differ. Same conventions as bjolt_create_hinge_constraint.
 bool bjolt_ragdoll_build_set_hinge(BJoltRagdollBuild *build, int part_index,
  float anchor_x, float anchor_y, float anchor_z,
- float hinge_axis_x, float hinge_axis_y, float hinge_axis_z,
- float normal_axis_x, float normal_axis_y, float normal_axis_z,
+ float hinge_axis1_x, float hinge_axis1_y, float hinge_axis1_z,
+ float normal_axis1_x, float normal_axis1_y, float normal_axis1_z,
+ float hinge_axis2_x, float hinge_axis2_y, float hinge_axis2_z,
+ float normal_axis2_x, float normal_axis2_y, float normal_axis2_z,
  float limits_min, float limits_max)
 {
  if (build == nullptr || part_index < 0 || part_index >= (int)build->settings->mParts.size())
@@ -3070,10 +3073,10 @@ bool bjolt_ragdoll_build_set_hinge(BJoltRagdollBuild *build, int part_index,
  hinge->mSpace = EConstraintSpace::WorldSpace;
  hinge->mPoint1 = RVec3(anchor_x, anchor_y, anchor_z);
  hinge->mPoint2 = RVec3(anchor_x, anchor_y, anchor_z);
- hinge->mHingeAxis1 = Vec3(hinge_axis_x, hinge_axis_y, hinge_axis_z);
- hinge->mNormalAxis1 = Vec3(normal_axis_x, normal_axis_y, normal_axis_z);
- hinge->mHingeAxis2 = hinge->mHingeAxis1;
- hinge->mNormalAxis2 = hinge->mNormalAxis1;
+ hinge->mHingeAxis1 = Vec3(hinge_axis1_x, hinge_axis1_y, hinge_axis1_z);
+ hinge->mNormalAxis1 = Vec3(normal_axis1_x, normal_axis1_y, normal_axis1_z);
+ hinge->mHingeAxis2 = Vec3(hinge_axis2_x, hinge_axis2_y, hinge_axis2_z);
+ hinge->mNormalAxis2 = Vec3(normal_axis2_x, normal_axis2_y, normal_axis2_z);
  hinge->mLimitsMin = limits_min;
  hinge->mLimitsMax = limits_max;
  build->settings->mParts[part_index].mToParent = hinge;
@@ -3081,12 +3084,15 @@ bool bjolt_ragdoll_build_set_hinge(BJoltRagdollBuild *build, int part_index,
 }
 
 // Swing-twist limit between a part and its parent: cone swing about the
-// twist axis plus bounded twist, about `anchor` (world space). Same
-// conventions as bjolt_create_swing_twist_constraint.
+// twist axis plus bounded twist, about `anchor` (world space). Per-side
+// frames like the hinge above. Same conventions as
+// bjolt_create_swing_twist_constraint.
 bool bjolt_ragdoll_build_set_swing_twist(BJoltRagdollBuild *build, int part_index,
  float anchor_x, float anchor_y, float anchor_z,
- float twist_axis_x, float twist_axis_y, float twist_axis_z,
- float plane_axis_x, float plane_axis_y, float plane_axis_z,
+ float twist_axis1_x, float twist_axis1_y, float twist_axis1_z,
+ float plane_axis1_x, float plane_axis1_y, float plane_axis1_z,
+ float twist_axis2_x, float twist_axis2_y, float twist_axis2_z,
+ float plane_axis2_x, float plane_axis2_y, float plane_axis2_z,
  float normal_half_cone_angle, float plane_half_cone_angle,
  float twist_min_angle, float twist_max_angle)
 {
@@ -3096,10 +3102,10 @@ bool bjolt_ragdoll_build_set_swing_twist(BJoltRagdollBuild *build, int part_inde
  swing_twist->mSpace = EConstraintSpace::WorldSpace;
  swing_twist->mPosition1 = RVec3(anchor_x, anchor_y, anchor_z);
  swing_twist->mPosition2 = RVec3(anchor_x, anchor_y, anchor_z);
- swing_twist->mTwistAxis1 = Vec3(twist_axis_x, twist_axis_y, twist_axis_z);
- swing_twist->mPlaneAxis1 = Vec3(plane_axis_x, plane_axis_y, plane_axis_z);
- swing_twist->mTwistAxis2 = swing_twist->mTwistAxis1;
- swing_twist->mPlaneAxis2 = swing_twist->mPlaneAxis1;
+ swing_twist->mTwistAxis1 = Vec3(twist_axis1_x, twist_axis1_y, twist_axis1_z);
+ swing_twist->mPlaneAxis1 = Vec3(plane_axis1_x, plane_axis1_y, plane_axis1_z);
+ swing_twist->mTwistAxis2 = Vec3(twist_axis2_x, twist_axis2_y, twist_axis2_z);
+ swing_twist->mPlaneAxis2 = Vec3(plane_axis2_x, plane_axis2_y, plane_axis2_z);
  swing_twist->mNormalHalfConeAngle = normal_half_cone_angle;
  swing_twist->mPlaneHalfConeAngle = plane_half_cone_angle;
  swing_twist->mTwistMinAngle = twist_min_angle;
