@@ -1308,59 +1308,59 @@ unsafe extern "C" {
         rot_y: c_float,
         rot_z: c_float,
         rot_w: c_float,
- object_layer: u16,
- density_kg_per_m3: c_float,
- motion_type: u8,
- ) -> c_int;
- /// Hinge limit between a part and its parent, about `anchor` (world
- /// space), within [`limits_min`, `limits_max`], seated pose reads zero.
- pub fn bjolt_ragdoll_build_set_hinge(
- build: *mut BJoltRagdollBuild,
- part_index: c_int,
- anchor_x: c_float,
- anchor_y: c_float,
- anchor_z: c_float,
- hinge_axis1_x: c_float,
- hinge_axis1_y: c_float,
- hinge_axis1_z: c_float,
- normal_axis1_x: c_float,
- normal_axis1_y: c_float,
- normal_axis1_z: c_float,
- hinge_axis2_x: c_float,
- hinge_axis2_y: c_float,
- hinge_axis2_z: c_float,
- normal_axis2_x: c_float,
- normal_axis2_y: c_float,
- normal_axis2_z: c_float,
- limits_min: c_float,
- limits_max: c_float,
- ) -> bool;
- /// Swing-twist limit between a part and its parent, about `anchor`
- /// (world space): cone swing about `twist_axis` plus bounded twist.
- /// Per-side frames (`1` parent, `2` child).
- pub fn bjolt_ragdoll_build_set_swing_twist(
- build: *mut BJoltRagdollBuild,
- part_index: c_int,
- anchor_x: c_float,
- anchor_y: c_float,
- anchor_z: c_float,
- twist_axis1_x: c_float,
- twist_axis1_y: c_float,
- twist_axis1_z: c_float,
- plane_axis1_x: c_float,
- plane_axis1_y: c_float,
- plane_axis1_z: c_float,
- twist_axis2_x: c_float,
- twist_axis2_y: c_float,
- twist_axis2_z: c_float,
- plane_axis2_x: c_float,
- plane_axis2_y: c_float,
- plane_axis2_z: c_float,
- normal_half_cone_angle: c_float,
- plane_half_cone_angle: c_float,
- twist_min_angle: c_float,
- twist_max_angle: c_float,
- ) -> bool;
+        object_layer: u16,
+        density_kg_per_m3: c_float,
+        motion_type: u8,
+    ) -> c_int;
+    /// Hinge limit between a part and its parent, about `anchor` (world
+    /// space), within [`limits_min`, `limits_max`], seated pose reads zero.
+    pub fn bjolt_ragdoll_build_set_hinge(
+        build: *mut BJoltRagdollBuild,
+        part_index: c_int,
+        anchor_x: c_float,
+        anchor_y: c_float,
+        anchor_z: c_float,
+        hinge_axis1_x: c_float,
+        hinge_axis1_y: c_float,
+        hinge_axis1_z: c_float,
+        normal_axis1_x: c_float,
+        normal_axis1_y: c_float,
+        normal_axis1_z: c_float,
+        hinge_axis2_x: c_float,
+        hinge_axis2_y: c_float,
+        hinge_axis2_z: c_float,
+        normal_axis2_x: c_float,
+        normal_axis2_y: c_float,
+        normal_axis2_z: c_float,
+        limits_min: c_float,
+        limits_max: c_float,
+    ) -> bool;
+    /// Swing-twist limit between a part and its parent, about `anchor`
+    /// (world space): cone swing about `twist_axis` plus bounded twist.
+    /// Per-side frames (`1` parent, `2` child).
+    pub fn bjolt_ragdoll_build_set_swing_twist(
+        build: *mut BJoltRagdollBuild,
+        part_index: c_int,
+        anchor_x: c_float,
+        anchor_y: c_float,
+        anchor_z: c_float,
+        twist_axis1_x: c_float,
+        twist_axis1_y: c_float,
+        twist_axis1_z: c_float,
+        plane_axis1_x: c_float,
+        plane_axis1_y: c_float,
+        plane_axis1_z: c_float,
+        twist_axis2_x: c_float,
+        twist_axis2_y: c_float,
+        twist_axis2_z: c_float,
+        plane_axis2_x: c_float,
+        plane_axis2_y: c_float,
+        plane_axis2_z: c_float,
+        normal_half_cone_angle: c_float,
+        plane_half_cone_angle: c_float,
+        twist_min_angle: c_float,
+        twist_max_angle: c_float,
+    ) -> bool;
     /// Jolt mass stabilization (ratio clamp + parent-inertia boost), in
     /// place. Run after all parts, before create. False on failure.
     pub fn bjolt_ragdoll_build_stabilize(build: *mut BJoltRagdollBuild) -> bool;
@@ -1381,17 +1381,17 @@ unsafe extern "C" {
         handle: *mut BJoltRagdoll,
         out_ids: *mut u32,
         id_capacity: u32,
- ) -> u32;
- /// Flips every body in the ragdoll to one motion: 0 static,
- /// 1 kinematic (follow bones, hitbox mode), 2 dynamic (simulate).
- pub fn bjolt_ragdoll_set_motion(
- world_ptr: *mut BJoltWorld,
- handle: *mut BJoltRagdoll,
- motion_type: u8,
- );
- /// Removes bodies + constraints and frees the ragdoll. Never mix with
- /// per-body remove/destroy on these ids.
- pub fn bjolt_ragdoll_destroy(world_ptr: *mut BJoltWorld, handle: *mut BJoltRagdoll);
+    ) -> u32;
+    /// Flips every body in the ragdoll to one motion: 0 static,
+    /// 1 kinematic (follow bones, hitbox mode), 2 dynamic (simulate).
+    pub fn bjolt_ragdoll_set_motion(
+        world_ptr: *mut BJoltWorld,
+        handle: *mut BJoltRagdoll,
+        motion_type: u8,
+    );
+    /// Removes bodies + constraints and frees the ragdoll. Never mix with
+    /// per-body remove/destroy on these ids.
+    pub fn bjolt_ragdoll_destroy(world_ptr: *mut BJoltWorld, handle: *mut BJoltRagdoll);
     /// Frees the builder (settings only, after create).
     pub fn bjolt_ragdoll_build_destroy(build: *mut BJoltRagdollBuild);
 }
