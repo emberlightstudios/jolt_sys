@@ -222,6 +222,10 @@ struct BJoltWorld {
 	// real body in the physics system; destroyed slots null out and never
 	// recycle.
 	std::vector<Ref<Character>> rigid_character_registry;
+	// Ragdoll registry: live `Ragdoll` per slot, 1-based Rust ids. `Ref`
+	// keeps each ragdoll alive; destroyed slots hold null and are never
+	// reused, so ids stay stable for the world's lifetime.
+	std::vector<Ref<Ragdoll>> ragdoll_registry;
 	// Contact + sensor event queues: the listener records raw body ids
 	// during the step (no Bevy access under solver locks); Rust drains them
 	// after the step and resolves entities itself.
@@ -3137,71 +3141,79 @@ void bjolt_ragdoll_build_finalize(BJoltRagdollBuild *build)
 
 // Creates bodies + constraints from stabilized settings and adds them to
 // the system in one shot. `group_id` must be unique per ragdoll in the
-// system. Returns null on failure.
-struct BJoltRagdoll {
-	Ref<Ragdoll> ragdoll;
-};
-
-BJoltRagdoll *bjolt_ragdoll_create(BJoltWorld *world, BJoltRagdollBuild *build,
+// system. Returns the 1-based registry id, or 0 on failure. The `Ref` in the
+// registry owns the ragdoll; Rust never sees a pointer.
+uint32_t bjolt_ragdoll_create(BJoltWorld *world, BJoltRagdollBuild *build,
 	uint32_t group_id, uint64_t user_data)
 {
 	if (world == nullptr || build == nullptr)
-		return nullptr;
+		return 0;
 	Ragdoll *ragdoll = build->settings->CreateRagdoll(group_id, user_data,
 		world->physics_system);
 	if (ragdoll == nullptr)
-		return nullptr;
+		return 0;
 	ragdoll->AddToPhysicsSystem(EActivation::Activate);
-	BJoltRagdoll *handle = new BJoltRagdoll();
-	handle->ragdoll = ragdoll;
-	return handle;
+	world->ragdoll_registry.push_back(ragdoll);
+	return (uint32_t)world->ragdoll_registry.size();
 }
 
-uint32_t bjolt_ragdoll_body_count(BJoltRagdoll *handle)
+static Ragdoll *bjolt_ragdoll_lookup(BJoltWorld *world, uint32_t ragdoll_id)
 {
-	if (handle == nullptr)
+	if (world == nullptr || ragdoll_id == 0 || ragdoll_id > world->ragdoll_registry.size())
+		return nullptr;
+	Ref<Ragdoll> &slot = world->ragdoll_registry[ragdoll_id - 1];
+	return slot.GetPtr();
+}
+
+uint32_t bjolt_ragdoll_body_count(BJoltWorld *world, uint32_t ragdoll_id)
+{
+	Ragdoll *ragdoll = bjolt_ragdoll_lookup(world, ragdoll_id);
+	if (ragdoll == nullptr)
 		return 0;
-	return (uint32_t)handle->ragdoll->GetBodyCount();
+	return (uint32_t)ragdoll->GetBodyCount();
 }
 
 // Writes body ids (Jolt index+sequence scheme, same as every other create)
 // in part order into `out_ids`. Returns ids written.
-uint32_t bjolt_ragdoll_body_ids(BJoltRagdoll *handle, uint32_t *out_ids, uint32_t id_capacity)
+uint32_t bjolt_ragdoll_body_ids(BJoltWorld *world, uint32_t ragdoll_id, uint32_t *out_ids, uint32_t id_capacity)
 {
-	if (handle == nullptr || out_ids == nullptr || id_capacity == 0)
+	Ragdoll *ragdoll = bjolt_ragdoll_lookup(world, ragdoll_id);
+	if (ragdoll == nullptr || out_ids == nullptr || id_capacity == 0)
 		return 0;
-	uint32_t body_count = (uint32_t)handle->ragdoll->GetBodyCount();
+	uint32_t body_count = (uint32_t)ragdoll->GetBodyCount();
 	uint32_t kept = body_count < id_capacity ? body_count : id_capacity;
 	for (uint32_t body_index = 0; body_index < kept; ++body_index)
-		out_ids[body_index] = handle->ragdoll->GetBodyID(body_index).GetIndexAndSequenceNumber();
+		out_ids[body_index] = ragdoll->GetBodyID(body_index).GetIndexAndSequenceNumber();
 	return kept;
 }
 
 // Flips every body in the ragdoll to one motion: 0 static, 1 kinematic,
 // 2 dynamic. Same wake rules as bjolt_set_motion_type. Kinematic bodies
 // follow bones (hitbox mode); dynamic bodies simulate (ragdoll mode).
-void bjolt_ragdoll_set_motion(BJoltWorld *world, BJoltRagdoll *handle, uint8_t motion_type)
+void bjolt_ragdoll_set_motion(BJoltWorld *world, uint32_t ragdoll_id, uint8_t motion_type)
 {
- if (world == nullptr || handle == nullptr)
- return;
- BodyInterface &body_interface = world->physics_system->GetBodyInterface();
- EMotionType jolt_motion = motion_type == 0 ? EMotionType::Static :
- (motion_type == 1 ? EMotionType::Kinematic : EMotionType::Dynamic);
- EActivation wake = jolt_motion == EMotionType::Static ?
- EActivation::DontActivate : EActivation::Activate;
- for (const BodyID &body_id : handle->ragdoll->GetBodyIDs())
- body_interface.SetMotionType(body_id, jolt_motion, wake);
+	Ragdoll *ragdoll = bjolt_ragdoll_lookup(world, ragdoll_id);
+	if (ragdoll == nullptr)
+		return;
+	BodyInterface &body_interface = world->physics_system->GetBodyInterface();
+	EMotionType jolt_motion = motion_type == 0 ? EMotionType::Static :
+		(motion_type == 1 ? EMotionType::Kinematic : EMotionType::Dynamic);
+	EActivation wake = jolt_motion == EMotionType::Static ?
+		EActivation::DontActivate : EActivation::Activate;
+	for (const BodyID &body_id : ragdoll->GetBodyIDs())
+		body_interface.SetMotionType(body_id, jolt_motion, wake);
 }
 
-// Removes bodies + constraints from the system and frees the ragdoll.
-// Never mix with per-body bjolt_body_remove_destroy on these ids.
-void bjolt_ragdoll_destroy(BJoltWorld *world, BJoltRagdoll *handle)
+// Removes bodies + constraints from the system and releases the registry
+// slot (nulled, never reused). Never mix with per-body
+// bjolt_body_remove_destroy on these ids.
+void bjolt_ragdoll_destroy(BJoltWorld *world, uint32_t ragdoll_id)
 {
-	if (handle == nullptr)
+	Ragdoll *ragdoll = bjolt_ragdoll_lookup(world, ragdoll_id);
+	if (ragdoll == nullptr)
 		return;
-	if (world != nullptr)
-		handle->ragdoll->RemoveFromPhysicsSystem();
-	delete handle;
+	ragdoll->RemoveFromPhysicsSystem();
+	world->ragdoll_registry[ragdoll_id - 1] = nullptr;
 }
 
 void bjolt_ragdoll_build_destroy(BJoltRagdollBuild *build)

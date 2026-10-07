@@ -21,13 +21,6 @@ pub struct BJoltRagdollBuild {
     _opaque: [u8; 0],
 }
 
-/// Opaque handle to a live C++ `BJoltRagdoll` (created bodies +
-/// constraints in the system).
-#[repr(C)]
-pub struct BJoltRagdoll {
-    _opaque: [u8; 0],
-}
-
 /// Largest object-layer count the shim supports (one broadphase bucket each).
 pub const MAX_OBJECT_LAYERS: usize = 16;
 
@@ -822,7 +815,7 @@ unsafe extern "C" {
         id_capacity: u32,
     ) -> u32;
     pub fn bjolt_drain_woke(world_ptr: *mut BJoltWorld, out_ids: *mut u32, id_capacity: u32)
-        -> u32;
+    -> u32;
     pub fn bjolt_create_heightfield(
         world_ptr: *mut BJoltWorld,
         sample_heights: *const c_float,
@@ -1367,31 +1360,29 @@ unsafe extern "C" {
     /// Constraint priorities + shared parent-child no-collide filter.
     pub fn bjolt_ragdoll_build_finalize(build: *mut BJoltRagdollBuild);
     /// Creates bodies + constraints and adds them to the system in one
-    /// shot. `group_id` unique per ragdoll. Null on failure.
+    /// shot. `group_id` unique per ragdoll. Returns the 1-based registry
+    /// id, or 0 on failure.
     pub fn bjolt_ragdoll_create(
         world_ptr: *mut BJoltWorld,
         build: *mut BJoltRagdollBuild,
         group_id: u32,
         user_data: u64,
-    ) -> *mut BJoltRagdoll;
+    ) -> u32;
     /// Part count (= body count) of a live ragdoll.
-    pub fn bjolt_ragdoll_body_count(handle: *mut BJoltRagdoll) -> u32;
+    pub fn bjolt_ragdoll_body_count(world_ptr: *mut BJoltWorld, ragdoll_id: u32) -> u32;
     /// Body ids in part order. Returns ids written (capped at capacity).
     pub fn bjolt_ragdoll_body_ids(
-        handle: *mut BJoltRagdoll,
+        world_ptr: *mut BJoltWorld,
+        ragdoll_id: u32,
         out_ids: *mut u32,
         id_capacity: u32,
     ) -> u32;
     /// Flips every body in the ragdoll to one motion: 0 static,
     /// 1 kinematic (follow bones, hitbox mode), 2 dynamic (simulate).
-    pub fn bjolt_ragdoll_set_motion(
-        world_ptr: *mut BJoltWorld,
-        handle: *mut BJoltRagdoll,
-        motion_type: u8,
-    );
-    /// Removes bodies + constraints and frees the ragdoll. Never mix with
-    /// per-body remove/destroy on these ids.
-    pub fn bjolt_ragdoll_destroy(world_ptr: *mut BJoltWorld, handle: *mut BJoltRagdoll);
+    pub fn bjolt_ragdoll_set_motion(world_ptr: *mut BJoltWorld, ragdoll_id: u32, motion_type: u8);
+    /// Removes bodies + constraints and releases the registry slot. Never
+    /// mix with per-body remove/destroy on these ids.
+    pub fn bjolt_ragdoll_destroy(world_ptr: *mut BJoltWorld, ragdoll_id: u32);
     /// Frees the builder (settings only, after create).
     pub fn bjolt_ragdoll_build_destroy(build: *mut BJoltRagdollBuild);
 }
