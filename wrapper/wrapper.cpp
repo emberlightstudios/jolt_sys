@@ -3081,10 +3081,13 @@ bool bjolt_ragdoll_build_set_hinge(BJoltRagdollBuild *build, int part_index,
  hinge->mNormalAxis1 = Vec3(normal_axis1_x, normal_axis1_y, normal_axis1_z);
  hinge->mHingeAxis2 = Vec3(hinge_axis2_x, hinge_axis2_y, hinge_axis2_z);
  hinge->mNormalAxis2 = Vec3(normal_axis2_x, normal_axis2_y, normal_axis2_z);
- hinge->mLimitsMin = limits_min;
- hinge->mLimitsMax = limits_max;
- build->settings->mParts[part_index].mToParent = hinge;
- return true;
+	hinge->mLimitsMin = limits_min;
+	hinge->mLimitsMax = limits_max;
+	// Motors start off: the drive call arms one axis at a time on demand.
+	hinge->mMotorSettings = MotorSettings(ESpringMode::FrequencyAndDamping, 8.0f, 1.0f);
+	hinge->mMotorSettings.SetTorqueLimit(1.0e6f);
+	build->settings->mParts[part_index].mToParent = hinge;
+	return true;
 }
 
 // Swing-twist limit between a part and its parent: cone swing about the
@@ -3110,12 +3113,17 @@ bool bjolt_ragdoll_build_set_swing_twist(BJoltRagdollBuild *build, int part_inde
  swing_twist->mPlaneAxis1 = Vec3(plane_axis1_x, plane_axis1_y, plane_axis1_z);
  swing_twist->mTwistAxis2 = Vec3(twist_axis2_x, twist_axis2_y, twist_axis2_z);
  swing_twist->mPlaneAxis2 = Vec3(plane_axis2_x, plane_axis2_y, plane_axis2_z);
- swing_twist->mNormalHalfConeAngle = normal_half_cone_angle;
- swing_twist->mPlaneHalfConeAngle = plane_half_cone_angle;
- swing_twist->mTwistMinAngle = twist_min_angle;
- swing_twist->mTwistMaxAngle = twist_max_angle;
- build->settings->mParts[part_index].mToParent = swing_twist;
- return true;
+	swing_twist->mNormalHalfConeAngle = normal_half_cone_angle;
+	swing_twist->mPlaneHalfConeAngle = plane_half_cone_angle;
+	swing_twist->mTwistMinAngle = twist_min_angle;
+	swing_twist->mTwistMaxAngle = twist_max_angle;
+	// Motors start off: the drive call arms swing or twist on demand.
+	swing_twist->mSwingMotorSettings = MotorSettings(ESpringMode::FrequencyAndDamping, 8.0f, 1.0f);
+	swing_twist->mSwingMotorSettings.SetTorqueLimit(1.0e6f);
+	swing_twist->mTwistMotorSettings = MotorSettings(ESpringMode::FrequencyAndDamping, 8.0f, 1.0f);
+	swing_twist->mTwistMotorSettings.SetTorqueLimit(1.0e6f);
+	build->settings->mParts[part_index].mToParent = swing_twist;
+	return true;
 }
 
 // Mass-ratio clamp + parent-inertia boost, in place. Must run after all
@@ -3214,6 +3222,97 @@ void bjolt_ragdoll_destroy(BJoltWorld *world, uint32_t ragdoll_id)
 		return;
 	ragdoll->RemoveFromPhysicsSystem();
 	world->ragdoll_registry[ragdoll_id - 1] = nullptr;
+}
+
+// Velocity motor on the joint feeding `part_index` (0 = root, no joint).
+// Motors were armed at build with a fixed spring + torque cap; this only
+// picks the axis and retargets speed. `axis`: hinge = 0; swing-twist: 0 =
+// twist, 1 = swing; anything else stops both motors. Speed 0 stops motion
+// but holds the motor on (brake); use `bjolt_ragdoll_motor_off` to release.
+// Returns false on a bad id, root part, out-of-range part, or wrong type.
+bool bjolt_ragdoll_drive(BJoltWorld *world, uint32_t ragdoll_id, uint32_t part_index, uint8_t axis, float target_velocity)
+{
+	Ragdoll *ragdoll = bjolt_ragdoll_lookup(world, ragdoll_id);
+	if (ragdoll == nullptr || part_index == 0 || (size_t)part_index >= ragdoll->GetBodyIDs().size())
+		return false;
+	if ((size_t)(part_index - 1) >= ragdoll->GetConstraintCount())
+		return false;
+	TwoBodyConstraint *constraint = ragdoll->GetConstraint((int)(part_index - 1));
+	if (constraint == nullptr)
+		return false;
+	BodyInterface &body_interface = world->physics_system->GetBodyInterface();
+	switch (constraint->GetSubType())
+	{
+	case EConstraintSubType::Hinge:
+	{
+		HingeConstraint *hinge = static_cast<HingeConstraint *>(constraint);
+		hinge->SetMotorState(EMotorState::Velocity);
+		hinge->SetTargetAngularVelocity(target_velocity);
+		break;
+	}
+	case EConstraintSubType::SwingTwist:
+	{
+		SwingTwistConstraint *swing_twist = static_cast<SwingTwistConstraint *>(constraint);
+		// Twist spins about the local twist (Y) axis; swing sweeps about the
+		// local plane (X) axis. Constraint-space directions.
+		Vec3 swing_target = Vec3::sZero();
+		Vec3 twist_target = Vec3::sZero();
+		if (axis == 0)
+		{
+			swing_twist->SetSwingMotorState(EMotorState::Off);
+			swing_twist->SetTwistMotorState(EMotorState::Velocity);
+			twist_target.SetY(target_velocity);
+		}
+		else if (axis == 1)
+		{
+			swing_twist->SetSwingMotorState(EMotorState::Velocity);
+			swing_twist->SetTwistMotorState(EMotorState::Off);
+			swing_target.SetX(target_velocity);
+		}
+		else
+		{
+			swing_twist->SetSwingMotorState(EMotorState::Off);
+			swing_twist->SetTwistMotorState(EMotorState::Off);
+			break;
+		}
+		swing_twist->SetTargetAngularVelocityCS(swing_target + twist_target);
+		break;
+	}
+	default:
+		return false;
+	}
+	body_interface.ActivateBody(ragdoll->GetBodyID(part_index));
+	return true;
+}
+
+// Releases both motors on the joint feeding `part_index`, so the limb hangs
+// on limits alone. Returns false on a bad id, root part, or wrong type.
+bool bjolt_ragdoll_motor_off(BJoltWorld *world, uint32_t ragdoll_id, uint32_t part_index)
+{
+	Ragdoll *ragdoll = bjolt_ragdoll_lookup(world, ragdoll_id);
+	if (ragdoll == nullptr || part_index == 0 || (size_t)part_index >= ragdoll->GetBodyIDs().size())
+		return false;
+	if ((size_t)(part_index - 1) >= ragdoll->GetConstraintCount())
+		return false;
+	TwoBodyConstraint *constraint = ragdoll->GetConstraint((int)(part_index - 1));
+	if (constraint == nullptr)
+		return false;
+	switch (constraint->GetSubType())
+	{
+	case EConstraintSubType::Hinge:
+		static_cast<HingeConstraint *>(constraint)->SetMotorState(EMotorState::Off);
+		break;
+	case EConstraintSubType::SwingTwist:
+	{
+		SwingTwistConstraint *swing_twist = static_cast<SwingTwistConstraint *>(constraint);
+		swing_twist->SetSwingMotorState(EMotorState::Off);
+		swing_twist->SetTwistMotorState(EMotorState::Off);
+		break;
+	}
+	default:
+		return false;
+	}
+	return true;
 }
 
 void bjolt_ragdoll_build_destroy(BJoltRagdollBuild *build)

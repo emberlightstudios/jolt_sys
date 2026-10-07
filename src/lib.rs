@@ -1383,6 +1383,23 @@ unsafe extern "C" {
     /// Removes bodies + constraints and releases the registry slot. Never
     /// mix with per-body remove/destroy on these ids.
     pub fn bjolt_ragdoll_destroy(world_ptr: *mut BJoltWorld, ragdoll_id: u32);
+    /// Velocity motor on the joint feeding `part_index` (0 = root, no
+    /// joint). Hinge: axis 0. Swing-twist: 0 = twist, 1 = swing; other
+    /// values stop both motors. Speed 0 brakes; false on bad id/root/type.
+    pub fn bjolt_ragdoll_drive(
+        world_ptr: *mut BJoltWorld,
+        ragdoll_id: u32,
+        part_index: u32,
+        axis: u8,
+        target_velocity: c_float,
+    ) -> bool;
+    /// Releases both motors on the joint feeding `part_index`. False on bad
+    /// id, root part, or wrong joint type.
+    pub fn bjolt_ragdoll_motor_off(
+        world_ptr: *mut BJoltWorld,
+        ragdoll_id: u32,
+        part_index: u32,
+    ) -> bool;
     /// Frees the builder (settings only, after create).
     pub fn bjolt_ragdoll_build_destroy(build: *mut BJoltRagdollBuild);
 }
