@@ -295,6 +295,16 @@ void bjolt_world_destroy(BJoltWorld *world)
 	// their destructors run against a live system, not a deleted one.
 	world->rigid_character_registry.clear();
 	world->character_registry.clear();
+	// Same for ragdolls: each live Ragdoll destroys its bodies through the
+	// physics system when its last Ref drops. Remove and clear the registry
+	// now, while the system is alive; after the system is deleted that
+	// destructor touches freed memory and the process dies on exit.
+	for (Ref<Ragdoll> &ragdoll_slot : world->ragdoll_registry)
+	{
+		if (ragdoll_slot != nullptr)
+			ragdoll_slot->RemoveFromPhysicsSystem();
+	}
+	world->ragdoll_registry.clear();
 	delete world->contact_listener;
 	delete world->activation_listener;
 	delete world->physics_system;
