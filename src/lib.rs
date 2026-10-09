@@ -203,8 +203,15 @@ unsafe extern "C" {
     pub fn bjolt_world_create_with_layers(
         layer_count: u32,
         collide_matrix: *const u8,
+        max_bodies: u32,
+        max_body_pairs: u32,
+        max_contact_constraints: u32,
+        temp_allocator_bytes: u64,
     ) -> *mut BJoltWorld;
     pub fn bjolt_world_destroy(world_ptr: *mut BJoltWorld);
+    /// Live bodies + budget max for telemetry. Pairs/contacts have no
+    /// Jolt-side counter.
+    pub fn bjolt_world_body_count(world_ptr: *mut BJoltWorld, out_max_bodies: *mut u32) -> u32;
     pub fn bjolt_create_floor(
         world_ptr: *mut BJoltWorld,
         half_x: c_float,

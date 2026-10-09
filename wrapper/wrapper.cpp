@@ -205,9 +205,11 @@ struct BJoltWorld {
 	BevyJoltObjectVsBroadPhaseLayerFilter object_vs_broad_phase_filter;
 	BevyJoltObjectLayerPairFilter object_pair_filter;
 	TempAllocatorImpl *temp_allocator = nullptr;
-	// Budget for the guard below: set once at creation, read at every
+	// Budgets for the guard below: set once at creation, read at every
 	// create site. Jolt never grows the pool, so this is the final word.
 	uint32_t max_bodies = 0;
+	uint32_t max_body_pairs = 0;
+	uint32_t max_contact_constraints = 0;
 	JobSystemThreadPool *job_system = nullptr;
 	PhysicsSystem *physics_system = nullptr;
 	// Constraint registry: ids handed to Rust are 1-based indices.
@@ -274,7 +276,9 @@ bool bjolt_init()
 	return true;
 }
 
-BJoltWorld *bjolt_world_create_with_layers(uint layer_count, const uint8_t *collide_matrix)
+BJoltWorld *bjolt_world_create_with_layers(uint layer_count, const uint8_t *collide_matrix,
+	uint32_t max_bodies, uint32_t max_body_pairs, uint32_t max_contact_constraints,
+	uint64_t temp_allocator_bytes)
 {
 	BJoltWorld *world = new BJoltWorld();
 	if (layer_count == 0 || layer_count > MAX_OBJECT_LAYERS || collide_matrix == nullptr)
@@ -282,6 +286,16 @@ BJoltWorld *bjolt_world_create_with_layers(uint layer_count, const uint8_t *coll
 		delete world;
 		return nullptr;
 	}
+	// Budgets are fixed for the world's life: Jolt preallocates, never
+	// grows. Zero means "pick the default" so older callers stay valid.
+	if (max_bodies == 0)
+		max_bodies = 4096;
+	if (max_body_pairs == 0)
+		max_body_pairs = 4096;
+	if (max_contact_constraints == 0)
+		max_contact_constraints = 4096;
+	if (temp_allocator_bytes == 0)
+		temp_allocator_bytes = 32ULL * 1024ULL * 1024ULL;
 	world->collision_table.layer_count = layer_count;
 	for (uint row = 0; row < layer_count; ++row)
 		for (uint col = 0; col < layer_count; ++col)
@@ -289,12 +303,15 @@ BJoltWorld *bjolt_world_create_with_layers(uint layer_count, const uint8_t *coll
 	world->broad_phase_interface.SetLayerCount(layer_count);
 	world->object_vs_broad_phase_filter.SetTable(&world->collision_table);
 	world->object_pair_filter.SetTable(&world->collision_table);
-	world->temp_allocator = new TempAllocatorImpl(256 * 1024 * 1024);
+	world->temp_allocator = new TempAllocatorImpl((unsigned int)temp_allocator_bytes);
 	const int thread_count = (int)std::thread::hardware_concurrency() - 1;
 	world->job_system = new JobSystemThreadPool(cMaxPhysicsJobs, cMaxPhysicsBarriers, thread_count > 0 ? thread_count : 1);
 	world->physics_system = new PhysicsSystem();
-	world->max_bodies = 65536;
-	world->physics_system->Init(world->max_bodies, 0, world->max_bodies, world->max_bodies,
+	world->max_bodies = max_bodies;
+	world->max_body_pairs = max_body_pairs;
+	world->max_contact_constraints = max_contact_constraints;
+	world->physics_system->Init(world->max_bodies, 0, world->max_body_pairs,
+		world->max_contact_constraints,
 		world->broad_phase_interface,
 		world->object_vs_broad_phase_filter,
 		world->object_pair_filter);
@@ -303,6 +320,16 @@ BJoltWorld *bjolt_world_create_with_layers(uint layer_count, const uint8_t *coll
 	world->activation_listener = new BevyJoltActivationListener();
 	world->physics_system->SetBodyActivationListener(world->activation_listener);
 	return world;
+}
+// Live body count for budget telemetry (pairs/contacts have no Jolt-side
+// counter: size those by rule, watch bodies live).
+uint32_t bjolt_world_body_count(BJoltWorld *world, uint32_t *out_max_bodies)
+{
+	if (world == nullptr)
+		return 0;
+	if (out_max_bodies != nullptr)
+		*out_max_bodies = world->max_bodies;
+	return world->physics_system->GetNumBodies();
 }
 
 void bjolt_world_destroy(BJoltWorld *world)
