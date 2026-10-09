@@ -276,7 +276,7 @@ BJoltWorld *bjolt_world_create_with_layers(uint layer_count, const uint8_t *coll
 	const int thread_count = (int)std::thread::hardware_concurrency() - 1;
 	world->job_system = new JobSystemThreadPool(cMaxPhysicsJobs, cMaxPhysicsBarriers, thread_count > 0 ? thread_count : 1);
 	world->physics_system = new PhysicsSystem();
-	world->physics_system->Init(1024, 0, 1024, 1024,
+	world->physics_system->Init(65536, 0, 65536, 65536,
 		world->broad_phase_interface,
 		world->object_vs_broad_phase_filter,
 		world->object_pair_filter);
