@@ -853,6 +853,13 @@ uint32_t bjolt_create_swing_twist_constraint(BJoltWorld *world, uint32_t body1_r
 	settings.mPlaneHalfConeAngle = plane_half_cone_angle;
 	settings.mTwistMinAngle = twist_min_angle;
 	settings.mTwistMaxAngle = twist_max_angle;
+	// Motors start off: the drive call arms swing or twist on demand.
+	// Same arming as the ragdoll build path; without torque limits the
+	// drive branch spins against zero torque.
+	settings.mSwingMotorSettings = MotorSettings(ESpringMode::FrequencyAndDamping, 8.0f, 1.0f);
+	settings.mSwingMotorSettings.SetTorqueLimit(1.0e6f);
+	settings.mTwistMotorSettings = MotorSettings(ESpringMode::FrequencyAndDamping, 8.0f, 1.0f);
+	settings.mTwistMotorSettings.SetTorqueLimit(1.0e6f);
 	TwoBodyConstraint *constraint = body_interface.CreateConstraint(&settings, BodyID(body1_raw), BodyID(body2_raw));
 	if (constraint == nullptr)
 		return 0;
@@ -945,6 +952,52 @@ bool bjolt_constraint_drive_at(BJoltWorld *world, uint32_t constraint_id, float 
 	}
 	// Retargeting alone doesn't wake a body the solver put to sleep at its
 	// limit; kick both ends awake so the new direction actually starts.
+	TwoBodyConstraint *paired = static_cast<TwoBodyConstraint *>(base);
+	body_interface.ActivateBody(paired->GetBody1()->GetID());
+	body_interface.ActivateBody(paired->GetBody2()->GetID());
+	return true;
+}
+
+// Velocity motor on a swing-twist constraint. `axis` 0 = twist (spin about
+// the constraint X axis), 1 = swing (sweep about constraint Y/Z); anything
+// else stops both motors. Same convention as `bjolt_ragdoll_drive`.
+// Returns false on invalid ids or non-swing-twist joints.
+// NOTE: Jolt's twist is about constraint X (see `Quat::GetSwingTwist` and
+// the powered test's `sTargetVelocityCS = (90deg, 0, 0)`): an earlier
+// version drove twist on Y, which spun the motor against the wrong axis
+// and froze every swing-twist cut at zero velocity.
+bool bjolt_constraint_drive_swing_twist(BJoltWorld *world, uint32_t constraint_id, uint8_t axis, float target_velocity)
+{
+	if (constraint_id == 0 || constraint_id > world->constraint_registry.size())
+		return false;
+	Constraint *base = world->constraint_registry[constraint_id - 1];
+	if (base == nullptr || base->GetSubType() != EConstraintSubType::SwingTwist)
+		return false;
+	BodyInterface &body_interface = world->physics_system->GetBodyInterface();
+	SwingTwistConstraint *swing_twist = static_cast<SwingTwistConstraint *>(base);
+	// Twist spins about constraint X; swing sweeps about constraint Y/Z.
+	// Constraint-space directions (body 2's constraint frame).
+	Vec3 swing_target = Vec3::sZero();
+	Vec3 twist_target = Vec3::sZero();
+	if (axis == 0)
+	{
+		swing_twist->SetSwingMotorState(EMotorState::Off);
+		swing_twist->SetTwistMotorState(EMotorState::Velocity);
+		twist_target.SetX(target_velocity);
+	}
+	else if (axis == 1)
+	{
+		swing_twist->SetSwingMotorState(EMotorState::Velocity);
+		swing_twist->SetTwistMotorState(EMotorState::Off);
+		swing_target.SetY(target_velocity);
+	}
+	else
+	{
+		swing_twist->SetSwingMotorState(EMotorState::Off);
+		swing_twist->SetTwistMotorState(EMotorState::Off);
+		return true;
+	}
+	swing_twist->SetTargetAngularVelocityCS(swing_target + twist_target);
 	TwoBodyConstraint *paired = static_cast<TwoBodyConstraint *>(base);
 	body_interface.ActivateBody(paired->GetBody1()->GetID());
 	body_interface.ActivateBody(paired->GetBody2()->GetID());
@@ -3263,21 +3316,21 @@ bool bjolt_ragdoll_drive(BJoltWorld *world, uint32_t ragdoll_id, uint32_t part_i
 	case EConstraintSubType::SwingTwist:
 	{
 		SwingTwistConstraint *swing_twist = static_cast<SwingTwistConstraint *>(constraint);
-		// Twist spins about the local twist (Y) axis; swing sweeps about the
-		// local plane (X) axis. Constraint-space directions.
+		// Twist spins about constraint X; swing sweeps about constraint
+		// Y/Z (see `bjolt_constraint_drive_swing_twist`).
 		Vec3 swing_target = Vec3::sZero();
 		Vec3 twist_target = Vec3::sZero();
 		if (axis == 0)
 		{
 			swing_twist->SetSwingMotorState(EMotorState::Off);
 			swing_twist->SetTwistMotorState(EMotorState::Velocity);
-			twist_target.SetY(target_velocity);
+			twist_target.SetX(target_velocity);
 		}
 		else if (axis == 1)
 		{
 			swing_twist->SetSwingMotorState(EMotorState::Velocity);
 			swing_twist->SetTwistMotorState(EMotorState::Off);
-			swing_target.SetX(target_velocity);
+			swing_target.SetY(target_velocity);
 		}
 		else
 		{

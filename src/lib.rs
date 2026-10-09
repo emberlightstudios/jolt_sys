@@ -996,6 +996,15 @@ unsafe extern "C" {
         constraint_id: u32,
         target_velocity: c_float,
     ) -> bool;
+    /// Velocity motor on a swing-twist constraint: `axis` 0 = twist (spin
+    /// about the constraint X axis), 1 = swing (sweep about constraint Y/Z),
+    /// matching `bjolt_ragdoll_drive`. Anything else stops both motors.
+    pub fn bjolt_constraint_drive_swing_twist(
+        world_ptr: *mut BJoltWorld,
+        constraint_id: u32,
+        axis: u8,
+        target_velocity: c_float,
+    ) -> bool;
     pub fn bjolt_remove_constraint(world_ptr: *mut BJoltWorld, constraint_id: u32);
     pub fn bjolt_constraint_path_fraction(
         world_ptr: *mut BJoltWorld,
