@@ -1389,6 +1389,8 @@ unsafe extern "C" {
     /// Flips every body in the ragdoll to one motion: 0 static,
     /// 1 kinematic (follow bones, hitbox mode), 2 dynamic (simulate).
     pub fn bjolt_ragdoll_set_motion(world_ptr: *mut BJoltWorld, ragdoll_id: u32, motion_type: u8);
+    /// Moves every body in the ragdoll to another object layer.
+    pub fn bjolt_ragdoll_set_layer(world_ptr: *mut BJoltWorld, ragdoll_id: u32, object_layer: u16);
     /// Removes bodies + constraints and releases the registry slot. Never
     /// mix with per-body remove/destroy on these ids.
     pub fn bjolt_ragdoll_destroy(world_ptr: *mut BJoltWorld, ragdoll_id: u32);
