@@ -239,15 +239,15 @@ struct BJoltWorld {
 // Body-budget guard: Jolt hands back a null body with no message when the
 // pool is dry, which used to surface as a bare assert pages away. Every
 // create site calls this first so the log names the limit and the fix.
-static inline bool bjolt_bodies_available(BJoltWorld *world, const char *what)
+static inline bool bjolt_bodies_available(BJoltWorld *world)
 {
 	uint32_t live_bodies = world->physics_system->GetNumBodies();
 	if (live_bodies < world->max_bodies)
 		return true;
 	fprintf(stderr,
-		"[bevy_jolt] out of Jolt bodies creating %s: %u live of %u max. "
+		"[bevy_jolt] out of Jolt bodies: %u live of %u max. "
 		"Raise the world budget (max bodies) and retry.\n",
-		what, live_bodies, world->max_bodies);
+		live_bodies, world->max_bodies);
 	return false;
 }
 
@@ -333,7 +333,7 @@ void bjolt_world_destroy(BJoltWorld *world)
 
 uint32_t bjolt_create_floor(BJoltWorld *world, float half_x, float half_y, float half_z, float pos_y)
 {
-	if (!bjolt_bodies_available(world, "floor"))
+	if (!bjolt_bodies_available(world))
 		return 0;
 	BodyInterface &body_interface = world->physics_system->GetBodyInterface();
 	BoxShapeSettings shape_settings(Vec3(half_x, half_y, half_z));
@@ -350,7 +350,7 @@ uint32_t bjolt_create_floor(BJoltWorld *world, float half_x, float half_y, float
 uint32_t bjolt_create_sphere(BJoltWorld *world, float radius,
 	float pos_x, float pos_y, float pos_z, uint16_t object_layer, float density_kg_per_m3, float gravity_factor)
 {
-	if (!bjolt_bodies_available(world, "sphere"))
+	if (!bjolt_bodies_available(world))
 		return 0;
 	BodyInterface &body_interface = world->physics_system->GetBodyInterface();
 	SphereShapeSettings shape_settings(radius);
@@ -405,7 +405,7 @@ void bjolt_body_remove_destroy(BJoltWorld *world, uint32_t body_id_raw)
 uint32_t bjolt_create_box(BJoltWorld *world, float half_x, float half_y, float half_z,
 	float pos_x, float pos_y, float pos_z, uint16_t object_layer, uint8_t motion, float density_kg_per_m3, float gravity_factor)
 {
-	if (!bjolt_bodies_available(world, "box"))
+	if (!bjolt_bodies_available(world))
 		return 0;
 	BodyInterface &body_interface = world->physics_system->GetBodyInterface();
 	BoxShapeSettings shape_settings(Vec3(half_x, half_y, half_z));
@@ -475,7 +475,7 @@ void bjolt_set_motion_type(BJoltWorld *world, uint32_t body_raw, uint8_t motion_
 uint32_t bjolt_create_capsule(BJoltWorld *world, float half_height, float radius,
 	float pos_x, float pos_y, float pos_z, uint16_t object_layer, float density_kg_per_m3, float gravity_factor)
 {
-	if (!bjolt_bodies_available(world, "capsule"))
+	if (!bjolt_bodies_available(world))
 		return 0;
 	BodyInterface &body_interface = world->physics_system->GetBodyInterface();
 	CapsuleShapeSettings shape_settings(half_height, radius);
@@ -496,7 +496,7 @@ uint32_t bjolt_create_capsule(BJoltWorld *world, float half_height, float radius
 uint32_t bjolt_create_cylinder(BJoltWorld *world, float half_height, float radius,
 	float pos_x, float pos_y, float pos_z, uint16_t object_layer, float density_kg_per_m3, float gravity_factor)
 {
-	if (!bjolt_bodies_available(world, "cylinder"))
+	if (!bjolt_bodies_available(world))
 		return 0;
 	BodyInterface &body_interface = world->physics_system->GetBodyInterface();
 	CylinderShapeSettings shape_settings(half_height, radius);
@@ -518,7 +518,7 @@ uint32_t bjolt_create_tapered_cylinder(BJoltWorld *world, float half_height,
 	float top_radius, float bottom_radius,
 	float pos_x, float pos_y, float pos_z, uint16_t object_layer, float density_kg_per_m3, float gravity_factor)
 {
-	if (!bjolt_bodies_available(world, "tapered cylinder"))
+	if (!bjolt_bodies_available(world))
 		return 0;
 	BodyInterface &body_interface = world->physics_system->GetBodyInterface();
 	TaperedCylinderShapeSettings shape_settings(half_height, top_radius, bottom_radius);
@@ -540,7 +540,7 @@ uint32_t bjolt_create_tapered_capsule(BJoltWorld *world, float half_height,
 	float top_radius, float bottom_radius,
 	float pos_x, float pos_y, float pos_z, uint16_t object_layer, float density_kg_per_m3, float gravity_factor)
 {
-	if (!bjolt_bodies_available(world, "tapered capsule"))
+	if (!bjolt_bodies_available(world))
 		return 0;
 	BodyInterface &body_interface = world->physics_system->GetBodyInterface();
 	TaperedCapsuleShapeSettings shape_settings(half_height, top_radius, bottom_radius);
@@ -721,7 +721,7 @@ uint32_t bjolt_create_plane(BJoltWorld *world,
 	float normal_x, float normal_y, float normal_z, float constant,
 	float half_extent, uint16_t object_layer)
 {
-	if (!bjolt_bodies_available(world, "plane"))
+	if (!bjolt_bodies_available(world))
 		return 0;
 	BodyInterface &body_interface = world->physics_system->GetBodyInterface();
 	Plane plane(Vec3(normal_x, normal_y, normal_z), constant);
@@ -1474,7 +1474,7 @@ uint32_t bjolt_create_wheeled_vehicle(BJoltWorld *world, uint16_t object_layer,
 	float limited_slip_ratio,
 	uint32_t *out_body_raw, uint32_t *out_constraint_id)
 {
-	if (!bjolt_bodies_available(world, "vehicle"))
+	if (!bjolt_bodies_available(world))
 		return 0;
 	BodyInterface &body_interface = world->physics_system->GetBodyInterface();
 	Body *chassis = bjolt_spawn_vehicle_chassis(body_interface, object_layer,
@@ -1522,7 +1522,7 @@ uint32_t bjolt_create_tracked_vehicle(BJoltWorld *world, uint16_t object_layer,
 	const BJoltTrackConfig *tracks,
 	uint32_t *out_body_raw, uint32_t *out_constraint_id)
 {
-	if (!bjolt_bodies_available(world, "vehicle"))
+	if (!bjolt_bodies_available(world))
 		return 0;
 	BodyInterface &body_interface = world->physics_system->GetBodyInterface();
 	Body *chassis = bjolt_spawn_vehicle_chassis(body_interface, object_layer,
@@ -1573,7 +1573,7 @@ uint32_t bjolt_create_motorcycle(BJoltWorld *world, uint16_t object_layer,
 	const BJoltLeanConfig *lean,
 	uint32_t *out_body_raw, uint32_t *out_constraint_id)
 {
-	if (!bjolt_bodies_available(world, "vehicle"))
+	if (!bjolt_bodies_available(world))
 		return 0;
 	BodyInterface &body_interface = world->physics_system->GetBodyInterface();
 	Body *chassis = bjolt_spawn_vehicle_chassis(body_interface, object_layer,
@@ -2115,7 +2115,7 @@ uint32_t bjolt_create_soft_body(
 	float vertex_radius, bool update_position, bool make_rotation_identity,
 	bool allow_sleeping, bool faces_double_sided, uint64_t user_data)
 {
-	if (world == nullptr || !bjolt_bodies_available(world, "soft body"))
+	if (world == nullptr || !bjolt_bodies_available(world))
 		return 0;
 	SoftBodySharedSettings *shared_settings = soft_shared_lookup(shared_handle);
 	if (shared_settings == nullptr)
@@ -2668,7 +2668,7 @@ uint32_t bjolt_rigid_character_create(BJoltWorld *world,
 	uint16_t object_layer, float mass_kg, float friction, float gravity_factor,
 	uint8_t allowed_dofs, uint64_t user_data)
 {
-	if (!bjolt_bodies_available(world, "rigid character"))
+	if (!bjolt_bodies_available(world))
 		return 0;
 	RefConst<Shape> capsule = new CapsuleShape(
 		0.5f * (2.0f * capsule_half_height + 2.0f * capsule_radius) - capsule_radius, capsule_radius);
@@ -2852,7 +2852,7 @@ uint32_t bjolt_create_compound(BJoltWorld *world,
 	float pos_x, float pos_y, float pos_z, uint16_t object_layer, uint8_t motion,
 	float density_kg_per_m3, float gravity_factor)
 {
-	if (!bjolt_bodies_available(world, "compound"))
+	if (!bjolt_bodies_available(world))
 		return 0;
 	if (parts == nullptr || part_count == 0 || part_count > 16)
 		return 0;
@@ -2895,7 +2895,7 @@ uint32_t bjolt_create_hull(BJoltWorld *world,
 	float pos_x, float pos_y, float pos_z, uint16_t object_layer, uint8_t motion,
 	float density_kg_per_m3, float gravity_factor)
 {
-	if (!bjolt_bodies_available(world, "hull"))
+	if (!bjolt_bodies_available(world))
 		return 0;
 	if (points_xyz == nullptr || point_count == 0)
 		return 0;
@@ -2930,7 +2930,7 @@ uint32_t bjolt_create_mesh(BJoltWorld *world,
 	const uint32_t *triangle_indices, uint32_t triangle_count,
 	float pos_x, float pos_y, float pos_z, uint16_t object_layer)
 {
-	if (!bjolt_bodies_available(world, "mesh"))
+	if (!bjolt_bodies_available(world))
 		return 0;
 	if (vertices_xyz == nullptr || vertex_count == 0
 		|| triangle_indices == nullptr || triangle_count == 0)
@@ -2965,7 +2965,7 @@ uint32_t bjolt_create_heightfield(BJoltWorld *world,
 	const float *sample_heights, uint32_t sample_count, uint32_t grid_width,
 	float cell_size, float pos_x, float pos_y, float pos_z, uint16_t object_layer)
 {
-	if (!bjolt_bodies_available(world, "heightfield"))
+	if (!bjolt_bodies_available(world))
 		return 0;
 	if (sample_heights == nullptr || sample_count == 0 || grid_width < 2
 		|| sample_count != grid_width * grid_width || cell_size <= 0.0f)
