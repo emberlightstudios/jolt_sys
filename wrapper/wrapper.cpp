@@ -289,11 +289,11 @@ BJoltWorld *bjolt_world_create_with_layers(uint layer_count, const uint8_t *coll
 	// Budgets are fixed for the world's life: Jolt preallocates, never
 	// grows. Zero means "pick the default" so older callers stay valid.
 	if (max_bodies == 0)
-		max_bodies = 4096;
+		max_bodies = 10240;
 	if (max_body_pairs == 0)
-		max_body_pairs = 4096;
+		max_body_pairs = 65536;
 	if (max_contact_constraints == 0)
-		max_contact_constraints = 4096;
+		max_contact_constraints = 20480;
 	if (temp_allocator_bytes == 0)
 		temp_allocator_bytes = 32ULL * 1024ULL * 1024ULL;
 	world->collision_table.layer_count = layer_count;
