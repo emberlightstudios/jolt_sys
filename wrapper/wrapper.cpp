@@ -272,7 +272,7 @@ BJoltWorld *bjolt_world_create_with_layers(uint layer_count, const uint8_t *coll
 	world->broad_phase_interface.SetLayerCount(layer_count);
 	world->object_vs_broad_phase_filter.SetTable(&world->collision_table);
 	world->object_pair_filter.SetTable(&world->collision_table);
-	world->temp_allocator = new TempAllocatorImpl(10 * 1024 * 1024);
+	world->temp_allocator = new TempAllocatorImpl(256 * 1024 * 1024);
 	const int thread_count = (int)std::thread::hardware_concurrency() - 1;
 	world->job_system = new JobSystemThreadPool(cMaxPhysicsJobs, cMaxPhysicsBarriers, thread_count > 0 ? thread_count : 1);
 	world->physics_system = new PhysicsSystem();
@@ -3273,6 +3273,18 @@ void bjolt_ragdoll_set_motion(BJoltWorld *world, uint32_t ragdoll_id, uint8_t mo
 		EActivation::DontActivate : EActivation::Activate;
 	for (const BodyID &body_id : ragdoll->GetBodyIDs())
 		body_interface.SetMotionType(body_id, jolt_motion, wake);
+}
+// Moves every part body to another object layer (re-inserts in the
+// broadphase, no velocity change). Lets hitbox-follow parts ride a quiet
+// team and simulated parts join one that meets the world.
+void bjolt_ragdoll_set_layer(BJoltWorld *world, uint32_t ragdoll_id, uint16_t object_layer)
+{
+	Ragdoll *ragdoll = bjolt_ragdoll_lookup(world, ragdoll_id);
+	if (ragdoll == nullptr)
+		return;
+	BodyInterface &body_interface = world->physics_system->GetBodyInterface();
+	for (const BodyID &body_id : ragdoll->GetBodyIDs())
+		body_interface.SetObjectLayer(body_id, object_layer);
 }
 
 // Removes bodies + constraints from the system and releases the registry
