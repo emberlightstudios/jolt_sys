@@ -751,6 +751,17 @@ unsafe extern "C" {
         gear: i32,
         clutch_friction: c_float,
     );
+    /// Live wheel world poses for one vehicle constraint: up to `max_wheels`
+    /// entries of 3 position floats + 4 rotation floats, written into
+    /// `out_positions` / `out_rotations`. Returns how many wheels were
+    /// written; 0 on an unknown/non-vehicle constraint id.
+    pub fn bjolt_vehicle_wheel_transforms(
+        world_ptr: *mut BJoltWorld,
+        constraint_id: u32,
+        out_positions: *mut c_float,
+        out_rotations: *mut c_float,
+        max_wheels: u32,
+    ) -> u32;
     pub fn bjolt_apply_impulse(
         world_ptr: *mut BJoltWorld,
         body_raw: u32,

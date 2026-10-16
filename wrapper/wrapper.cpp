@@ -1642,6 +1642,36 @@ static VehicleConstraint *bjolt_vehicle_at(BJoltWorld *world, uint32_t constrain
 	return static_cast<VehicleConstraint *>(base);
 }
 
+// Live wheel poses for one vehicle constraint: world position + rotation per
+// wheel, with steer, suspension travel, and roll baked in (the same
+// transform Jolt's own samples draw cylinders with: model Y is the axle).
+// Writes up to max_wheels entries of (3 position, 4 rotation) floats and
+// returns how many were written; 0 on a bad constraint id.
+uint32_t bjolt_vehicle_wheel_transforms(BJoltWorld *world, uint32_t constraint_id,
+	float *out_positions, float *out_rotations, uint32_t max_wheels)
+{
+	VehicleConstraint *vehicle_constraint = bjolt_vehicle_at(world, constraint_id);
+	if (vehicle_constraint == nullptr)
+		return 0;
+	const Wheels &wheels = vehicle_constraint->GetWheels();
+	uint32_t count = (uint32_t)wheels.size() < max_wheels ? (uint32_t)wheels.size() : max_wheels;
+	for (uint32_t wheel_index = 0; wheel_index < count; ++wheel_index)
+	{
+		RMat44 wheel_transform = vehicle_constraint->GetWheelWorldTransform(wheel_index,
+			Vec3::sAxisY(), Vec3::sAxisX());
+		RVec3 wheel_position = wheel_transform.GetTranslation();
+		Quat wheel_rotation = wheel_transform.GetQuaternion();
+		out_positions[wheel_index * 3 + 0] = wheel_position.GetX();
+		out_positions[wheel_index * 3 + 1] = wheel_position.GetY();
+		out_positions[wheel_index * 3 + 2] = wheel_position.GetZ();
+		out_rotations[wheel_index * 4 + 0] = wheel_rotation.GetX();
+		out_rotations[wheel_index * 4 + 1] = wheel_rotation.GetY();
+		out_rotations[wheel_index * 4 + 2] = wheel_rotation.GetZ();
+		out_rotations[wheel_index * 4 + 3] = wheel_rotation.GetW();
+	}
+	return count;
+}
+
 // Controller kind via the first wheel's settings type: Jolt RTTI lives on
 // the settings (SerializableObject), not on VehicleController. Tracked
 // wheels (TV) mean a TrackedVehicleController; wheeled wheels (WV) mean a
