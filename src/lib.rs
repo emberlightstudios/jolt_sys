@@ -242,7 +242,7 @@ unsafe extern "C" {
         out_velocity: *mut c_float,
         out_angular_velocity: *mut c_float,
     );
-    pub fn bjolt_body_remove_destroy(world_ptr: *mut BJoltWorld, body_id_raw: u32);
+    pub fn bjolt_body_remove_destroy(world_ptr: *mut BJoltWorld, body_id_raw: u32) -> bool;
     pub fn bjolt_create_box(
         world_ptr: *mut BJoltWorld,
         half_x: c_float,

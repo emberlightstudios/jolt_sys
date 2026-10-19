@@ -32,6 +32,18 @@ from the vendored checkout and exposes a flat C ABI over a C++ shim
    early `return 0`). Rust callers hold raw `u32` ids across frames;
    despawn races are normal, crashes are not. Cook failures return 0 and
    Rust asserts with a message naming the shape.
+   The one exception is destroy: `bjolt_body_remove_destroy` returns false
+   when the id names no live body, and bevy_jolt panics on that. A stale id
+   at destroy is a bug rather than a race, and Jolt's `DestroyBodies` indexes
+   `mBodies[id.GetIndex()]` with no bounds check and no sequence check (its
+   asserts are compiled out), so passing it through frees whatever body owns
+   that slot. No-op'ing instead would leave a live body nobody owns.
+   Destroying is always two calls: `RemoveBody` then `DestroyBody`. Jolt's
+   `RemoveBodyInternal` requires the body out of the broadphase and inactive
+   — asserts that this build compiles out — so `DestroyBody` alone on an
+   active body frees its memory while leaving its id in `mActiveBodies` for
+   the next `PhysicsSystem::Update` to walk. That is exactly how soft-body
+   teardown used to segfault (`bjolt_soft_destroy` skipped the first call).
 5. **No allocation under solver locks.** Listener callbacks
    (`ContactListener`, `BodyActivationListener`) record into fixed-cap
    arrays and return. Overflow drops the newest. Rust drains after the step

@@ -421,12 +421,24 @@ void bjolt_body_state(BJoltWorld *world, uint32_t body_id_raw, float *out_positi
 	out_angular_velocity[2] = spin.GetZ();
 }
 
-void bjolt_body_remove_destroy(BJoltWorld *world, uint32_t body_id_raw)
+// Returns false when the id names no live body: a stale id (its slot was
+// recycled) or a double destroy. The check is not optional: Jolt's
+// DestroyBodies indexes mBodies[id.GetIndex()] with no bounds check and no
+// sequence check, and its only guards are JPH_ASSERTs, which the Distribution
+// build compiles out — so an unchecked id frees whatever body now owns that
+// slot. The Rust side turns false into a panic.
+bool bjolt_body_remove_destroy(BJoltWorld *world, uint32_t body_id_raw)
 {
 	BodyID body_id(body_id_raw);
 	BodyInterface &body_interface = world->physics_system->GetBodyInterface();
+	BodyLockRead destroy_lock(world->physics_system->GetBodyLockInterface(), body_id);
+	bool is_live = destroy_lock.Succeeded();
+	destroy_lock.ReleaseLock();
+	if (!is_live)
+		return false;
 	body_interface.RemoveBody(body_id);
 	body_interface.DestroyBody(body_id);
+	return true;
 }
 
 uint32_t bjolt_create_box(BJoltWorld *world, float half_x, float half_y, float half_z,
@@ -1888,6 +1900,13 @@ uint32_t bjolt_soft_vertices(BJoltWorld *world, uint32_t body_raw, float *out_po
 }
 
 // Destroys a soft body. Never touches rigid bodies: order-independent.
+//
+// `RemoveBody` first, exactly like `bjolt_body_remove_destroy`: Jolt's
+// `RemoveBodyInternal` requires the body to be out of the broadphase and
+// inactive, and its `JPH_ASSERT`s are compiled out in the Distribution build.
+// A body deleted while still listed in `mActiveBodies[EBodyType::SoftBody]`
+// leaves a dangling id there, and the next `PhysicsSystem::Update` walks it —
+// which is what a soft body that had actually been simulated used to do.
 void bjolt_soft_destroy(BJoltWorld *world, uint32_t body_raw)
 {
 	BodyInterface &body_interface = world->physics_system->GetBodyInterface();
@@ -1896,7 +1915,10 @@ void bjolt_soft_destroy(BJoltWorld *world, uint32_t body_raw)
 	bool is_soft = destroy_lock.Succeeded() && destroy_lock.GetBody().IsSoftBody();
 	destroy_lock.ReleaseLock();
 	if (is_soft)
+	{
+		body_interface.RemoveBody(body_id);
 		body_interface.DestroyBody(body_id);
+	}
 }
 
 // Wind for one tick: uniform breeze over the whole sheet, pins hold the
