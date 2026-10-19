@@ -59,6 +59,13 @@ fn main() {
     // build (USE_ASSERTS=OFF): without it, a debug cargo build defines
     // JPH_DEBUG, auto-enables JPH_ENABLE_ASSERTS in the shim, and the link
     // fails on the missing AssertFailed symbol.
+    // The JPH_USE_* macros select intrinsics, vectorcall paths and virtuals, so
+    // the shim must see the same set the library was built with. They are
+    // x86-only: on other targets Jolt builds scalar/NEON, and neither the
+    // defines nor their -m flags exist there.
+    let target_is_x86 = std::env::var("CARGO_CFG_TARGET_ARCH")
+        .is_ok_and(|target_arch| target_arch == "x86_64" || target_arch == "x86");
+
     let mut shim = cc::Build::new();
     shim.cpp(true)
         .std("c++17")
@@ -66,18 +73,23 @@ fn main() {
         .include(&jolt_root)
         .define("NDEBUG", None)
         .define("JPH_OBJECT_STREAM", None)
-        .define("JPH_USE_SSE4_1", None)
-        .define("JPH_USE_SSE4_2", None)
-        .define("JPH_USE_AVX", None)
-        .define("JPH_USE_AVX2", None)
-        .define("JPH_USE_LZCNT", None)
-        .define("JPH_USE_TZCNT", None)
-        .define("JPH_USE_F16C", None)
-        .define("JPH_USE_FMADD", None)
         .warnings(false);
+    if target_is_x86 {
+        shim.define("JPH_USE_SSE4_1", None)
+            .define("JPH_USE_SSE4_2", None)
+            .define("JPH_USE_AVX", None)
+            .define("JPH_USE_AVX2", None)
+            .define("JPH_USE_LZCNT", None)
+            .define("JPH_USE_TZCNT", None)
+            .define("JPH_USE_F16C", None)
+            .define("JPH_USE_FMADD", None);
+    }
     if cfg!(target_os = "windows") {
-        shim.flag("/EHsc").flag("/arch:AVX2");
-    } else {
+        shim.flag("/EHsc");
+        if target_is_x86 {
+            shim.flag("/arch:AVX2");
+        }
+    } else if target_is_x86 {
         shim.flag("-mavx2")
             .flag("-mbmi")
             .flag("-mpopcnt")
