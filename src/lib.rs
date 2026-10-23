@@ -833,7 +833,7 @@ unsafe extern "C" {
         id_capacity: u32,
     ) -> u32;
     pub fn bjolt_drain_woke(world_ptr: *mut BJoltWorld, out_ids: *mut u32, id_capacity: u32)
-    -> u32;
+        -> u32;
     pub fn bjolt_create_heightfield(
         world_ptr: *mut BJoltWorld,
         sample_heights: *const c_float,
